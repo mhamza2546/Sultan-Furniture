@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --brand-dark: #000B1A;
+    --brand-gold: #C5A059;
+    --bg-main: #F8FAFC;
+    --card-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --card-shadow-hover: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  }
+
+  /* Override Bootstrap font with our premium Inter */
+  body, * {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+  }
+
+  /* Fix Bootstrap btn defaults clashing with our buttons */
+  .btn { border-radius: 0.75rem !important; }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
+  ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-xl;
+  }
+  .nav-item-active {
+    @apply bg-white/10 text-white border-l-4 border-[#C5A059];
+  }
+  .stat-card {
+    @apply p-6 bg-white rounded-3xl border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] hover:-translate-y-1;
+  }
+}
+
+/* Mobile Offcanvas Sidebar Styling */
+.offcanvas-sidebar {
+  width: 288px !important;
+  background-color: #000B1A !important;
+  border-right: 1px solid rgba(255,255,255,0.05) !important;
+}
+
+.offcanvas-sidebar .offcanvas-header {
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  padding: 1.25rem 1.5rem;
+}
+
+.offcanvas-sidebar .btn-close {
+  filter: invert(1);
+}
+
