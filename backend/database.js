@@ -118,6 +118,29 @@ async function initDB() {
       )
     `);
 
+    // Worker Ledger (New)
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS workers (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        job_role VARCHAR(255) DEFAULT 'General Labour',
+        balance DECIMAL(10,2) NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS worker_transactions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        worker_id INT NOT NULL,
+        type ENUM('EARNING', 'PAYMENT') NOT NULL,
+        amount DECIMAL(10,2) NOT NULL,
+        description VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (worker_id) REFERENCES workers(id) ON DELETE CASCADE
+      )
+    `);
+
     // Sales & Installments
     await connection.query(`
       CREATE TABLE IF NOT EXISTS sales (

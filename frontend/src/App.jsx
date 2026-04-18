@@ -3,7 +3,7 @@ import Sidebar from './components/Sidebar';
 import InventoryTable from './components/InventoryTable';
 import AddMaterialForm from './components/AddMaterialForm';
 import ManufacturingStages from './components/ManufacturingStages';
-import LabourPayouts from './components/LabourPayouts';
+import WorkerLedger from './components/WorkerLedger';
 import AccountsLedger from './components/AccountsLedger';
 import DynamicBOM from './components/DynamicBOM';
 import Dashboard from './components/Dashboard';
@@ -85,11 +85,9 @@ function App() {
         );
       case 'labour':
         return (
-          <div className="animate-in fade-in duration-500">
-            <h2 className="text-2xl font-bold text-slate-900 mb-4 tracking-tight">Labour Ledger & Payouts</h2>
-            <div className="bg-white rounded-4 shadow-sm border border-slate-100 p-4">
-              <LabourPayouts />
-            </div>
+          <div className="animate-in fade-in duration-500 h-full">
+            <h2 className="text-2xl font-bold text-slate-900 mb-4 tracking-tight">Worker Ledger Management</h2>
+            <WorkerLedger />
           </div>
         );
       case 'accounts':

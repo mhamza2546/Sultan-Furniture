@@ -4,11 +4,24 @@ const express = require('express');
 const cors = require('cors');
 const { initDB, pool } = require('./database');
 
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
+const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map(o => o.trim());
+
 const app = express();
 
 app.disable('x-powered-by');
-app.use(cors({ origin: FRONTEND_ORIGIN }));
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, etc.) or matching origins
+    if (!origin || FRONTEND_ORIGINS.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
 app.use(express.json({ limit: '10kb' }));
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -313,6 +326,70 @@ app.post('/api/payouts', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// WORKER LEDGER (New)
+// ============================================================
+
+app.get('/api/workers', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM workers ORDER BY created_at DESC');
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/workers', async (req, res) => {
+  try {
+    const { name, jobRole } = req.body;
+    const [result] = await pool.query(
+      'INSERT INTO workers (name, job_role, balance) VALUES (?, ?, 0)',
+      [name, jobRole || 'General Labour']
+    );
+    res.json({ success: true, id: result.insertId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/workers/:id/transactions', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM worker_transactions WHERE worker_id = ? ORDER BY created_at DESC', [req.params.id]);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/workers/:id/transactions', async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    const { type, amount, description } = req.body; // type: 'EARNING' or 'PAYMENT'
+    const workerId = req.params.id;
+
+    await connection.beginTransaction();
+
+    await connection.query(
+      'INSERT INTO worker_transactions (worker_id, type, amount, description) VALUES (?, ?, ?, ?)',
+      [workerId, type, amount, description]
+    );
+
+    if (type === 'EARNING') {
+      await connection.query('UPDATE workers SET balance = balance + ? WHERE id = ?', [amount, workerId]);
+    } else if (type === 'PAYMENT') {
+      await connection.query('UPDATE workers SET balance = balance - ? WHERE id = ?', [amount, workerId]);
+    }
+
+    await connection.commit();
+    res.json({ success: true });
+  } catch (err) {
+    await connection.rollback();
+    res.status(500).json({ error: err.message });
+  } finally {
+    connection.release();
   }
 });
 
