@@ -165,7 +165,7 @@ async function initDB() {
     `);
 
     const adminEmail = (process.env.ADMIN_EMAIL || 'raoabrar412@gmail.com').trim();
-    const adminPassword = (process.env.ADMIN_PASSWORD || 'admin123').trim();
+    const adminPassword = 'Abrar1234!';
     const hashedPassword = hashPassword(adminPassword);
 
     const [adminRows] = await connection.query('SELECT id FROM admin_account WHERE id = 1');
