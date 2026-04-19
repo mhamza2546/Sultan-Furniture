@@ -4,9 +4,11 @@ const express = require('express');
 const cors = require('cors');
 const { initDB, pool } = require('./database');
 
-const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGIN || 'http://localhost:5173,https://sultan-furniture.vercel.app')
-  .split(',')
-  .map(o => o.trim());
+const FRONTEND_ORIGINS = [
+  'http://localhost:5173', 
+  'https://sultan-furniture.vercel.app',
+  ...(process.env.FRONTEND_ORIGIN ? process.env.FRONTEND_ORIGIN.split(',') : [])
+].map(o => o.trim());
 
 const app = express();
 
