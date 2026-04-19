@@ -164,25 +164,25 @@ async function initDB() {
       )
     `);
 
-    const [adminRows] = await connection.query('SELECT password FROM admin_account WHERE id = 1');
-    const adminEmail = process.env.ADMIN_EMAIL || 'raoabrar412@gmail.com';
-    const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+    const adminEmail = (process.env.ADMIN_EMAIL || 'raoabrar412@gmail.com').trim();
+    const adminPassword = (process.env.ADMIN_PASSWORD || 'admin123').trim();
     const hashedPassword = hashPassword(adminPassword);
+
+    const [adminRows] = await connection.query('SELECT id FROM admin_account WHERE id = 1');
 
     if (!adminRows.length) {
       await connection.query(
         'INSERT INTO admin_account (id, email, password) VALUES (1, ?, ?)',
         [adminEmail, hashedPassword]
       );
+      console.log('✅ Admin account created.');
     } else {
-      const storedPassword = adminRows[0].password || '';
-      if (!/^[a-f0-9]{64}$/.test(storedPassword)) {
-        await connection.query(
-          'UPDATE admin_account SET password = ? WHERE id = 1',
-          [hashPassword(storedPassword)]
-        );
-      }
-      await connection.query('UPDATE admin_account SET email = ? WHERE id = 1', [adminEmail]);
+      // Force update to match environment variables
+      await connection.query(
+        'UPDATE admin_account SET email = ?, password = ? WHERE id = 1',
+        [adminEmail, hashedPassword]
+      );
+      console.log('✅ Admin account synchronized with environment variables.');
     }
 
     // Temporary OTP store
