@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import InventoryTable from './components/InventoryTable';
 import AddMaterialForm from './components/AddMaterialForm';
-import ManufacturingStages from './components/ManufacturingStages';
 import WorkerLedger from './components/WorkerLedger';
-import AccountsLedger from './components/AccountsLedger';
+import VendorLedger from './components/VendorLedger';
+import CustomerLedger from './components/CustomerLedger';
 import DynamicBOM from './components/DynamicBOM';
 import Dashboard from './components/Dashboard';
 import Auth from './components/Auth';
@@ -38,49 +38,18 @@ function App() {
         return (
           <Dashboard
             onGenerateReport={() => setActiveTab('reports')}
-            onViewPipeline={() => setActiveTab('manufacturing')}
           />
         );
       case 'inventory':
         return (
-          <div className="row g-4">
-            <div className="col-lg-8">
-              <div className="d-flex justify-content-between align-items-center mb-4">
-                <div>
-                  <h2 className="text-2xl font-bold text-slate-900 tracking-tight mb-0">Raw Materials Stock</h2>
-                  <p className="text-sm text-slate-500 mt-1">Real-time inventory levels from main warehouse</p>
-                </div>
-                <div className="d-flex gap-2 bg-slate-200 p-1 rounded-xl">
-                  <button className="p-2 bg-white text-slate-900 rounded-lg shadow-sm border-0"><LayoutGrid className="w-4 h-4" /></button>
-                  <button className="p-2 text-slate-500 border-0 bg-transparent"><List className="w-4 h-4" /></button>
-                </div>
-              </div>
-              <InventoryTable refreshTrigger={inventoryRefresh} />
-            </div>
-            <div className="col-lg-4 d-flex flex-column gap-4">
+          <div className="flex flex-col gap-8 h-full animate-in fade-in duration-500">
+            <div className="flex justify-between items-end">
               <div>
-                <h2 className="text-xl font-bold text-slate-900 mb-3 tracking-tight">Rapid Entry</h2>
-                <AddMaterialForm onMaterialAdded={() => setInventoryRefresh(r => r + 1)} />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-slate-900 mb-3 tracking-tight">Bill of Materials (BOM)</h2>
-                <div className="bg-white rounded-4 shadow-sm border border-slate-100 p-4">
-                  <DynamicBOM />
-                </div>
+                <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2 uppercase">Supplier & Material Ledger</h2>
+                <p className="text-sm text-slate-500 font-bold uppercase tracking-widest">Buy raw materials & track supplier debts</p>
               </div>
             </div>
-          </div>
-        );
-      case 'manufacturing':
-        return (
-          <div className="animate-in fade-in duration-500">
-            <div className="mb-4">
-              <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Production Pipeline</h2>
-              <p className="text-sm text-slate-500 mt-1">Track manufacturing stages from frame-work to final fitting</p>
-            </div>
-            <div className="bg-white rounded-4 shadow-sm border border-slate-100 p-4">
-              <ManufacturingStages />
-            </div>
+            <VendorLedger />
           </div>
         );
       case 'labour':
@@ -92,11 +61,9 @@ function App() {
         );
       case 'accounts':
         return (
-          <div className="animate-in fade-in duration-500">
-            <h2 className="text-2xl font-bold text-slate-900 mb-4 tracking-tight">Showroom Sales</h2>
-            <div className="bg-white rounded-4 shadow-sm border border-slate-100 p-4">
-              <AccountsLedger />
-            </div>
+          <div className="animate-in fade-in duration-500 h-full">
+            <h2 className="text-2xl font-bold text-slate-900 mb-4 tracking-tight">Showroom Sales & Credits</h2>
+            <CustomerLedger />
           </div>
         );
       case 'reports':
@@ -141,7 +108,6 @@ function App() {
             activeTab={activeTab}
             setActiveTab={(tab) => {
               setActiveTab(tab);
-              // Close offcanvas when a tab is selected
               const el = document.getElementById('mobileSidebar');
               const bs = window.bootstrap?.Offcanvas?.getInstance(el);
               if (bs) bs.hide();
@@ -177,7 +143,7 @@ function App() {
                 type="text"
                 placeholder="Master Search (Alt + /)"
                 className="form-control border-0 rounded-3 ps-5"
-                style={{ width: '320px', background: '#F1F5F9', fontSize: '14px', fontWeight: 600 }}
+                style={{ width: '100%', minWidth: '150px', maxWidth: '320px', background: '#F1F5F9', fontSize: '14px', fontWeight: 600 }}
               />
             </div>
 

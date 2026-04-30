@@ -26,6 +26,21 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
   ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+  /* High-end inputs and date stability */
+  input[type="date"] {
+    min-width: 140px;
+    padding-right: 8px !important;
+  }
+
+  input::placeholder {
+    @apply text-slate-300 font-medium;
+  }
+
+  .no-spinner::-webkit-inner-spin-button, 
+  .no-spinner::-webkit-outer-spin-button { 
+    -webkit-appearance: none; 
+    margin: 0; 
+  }
 }
 
 @layer components {
@@ -38,6 +53,12 @@
   .stat-card {
     @apply p-6 bg-white rounded-3xl border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] hover:-translate-y-1;
   }
+}
+
+/* Scrollbar stability */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 transparent;
 }
 
 /* Mobile Offcanvas Sidebar Styling */
@@ -55,4 +76,5 @@
 .offcanvas-sidebar .btn-close {
   filter: invert(1);
 }
+
 

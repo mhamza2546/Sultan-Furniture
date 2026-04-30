@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, Unlock, FileText, Plus, Trash2, Loader2, AlertCircle, Calendar, Search } from 'lucide-react';
+import { Lock, Unlock, FileText, Plus, Trash2, Loader2, AlertCircle, Calendar, Search, Pencil } from 'lucide-react';
 import { API } from '../lib/api';
 
 function PrivateVault() {
@@ -23,6 +23,27 @@ function PrivateVault() {
   const [filterMode, setFilterMode] = useState('month');
 
   const totalVaultExpenses = notes.reduce((sum, n) => sum + Number(n.amount || 0), 0);
+
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ title: '', content: '', amount: '' });
+
+  const startEdit = (n) => {
+    setEditingId(n.id);
+    setEditForm({ title: n.title, content: n.content, amount: n.amount });
+  };
+
+  const handleEditUpdate = async (e) => {
+    e.preventDefault();
+    try {
+      await fetch(`${API}/api/vault/${editingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...editForm, amount: Number(editForm.amount) })
+      });
+      setEditingId(null);
+      fetchNotes();
+    } catch(err) { console.error(err); }
+  };
 
   const handleUnlock = async (e) => {
     e.preventDefault();
@@ -97,7 +118,7 @@ function PrivateVault() {
   if (!unlocked) {
     return (
       <div className="flex flex-col items-center justify-center h-[70vh] animate-in fade-in zoom-in duration-500">
-        <div className="bg-white p-8 rounded-3xl shadow-xl shadow-slate-900/5 max-w-sm w-full border border-slate-100 relative overflow-hidden">
+        <div className="w-full max-w-[400px] bg-white p-8 rounded-3xl shadow-xl shadow-slate-900/5 border border-slate-100 relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 to-amber-500"></div>
           
           <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
@@ -206,8 +227,8 @@ function PrivateVault() {
 
       {showForm && (
         <form onSubmit={saveNote} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
-          <div className="flex gap-4">
-            <div className="flex-1">
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
+            <div className="sm:col-span-8">
               <label className="block text-[11px] font-bold text-slate-400 uppercase mb-2">Category or Person (Kahan kharcha hua?)</label>
               <input 
                 type="text" required placeholder="e.g. VIP guest protocol"
@@ -215,7 +236,7 @@ function PrivateVault() {
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
               />
             </div>
-            <div className="w-1/3">
+            <div className="sm:col-span-4">
               <label className="block text-[11px] font-bold text-slate-400 uppercase mb-2">Amount (Rs.)</label>
               <input 
                 type="number" required placeholder="0.00" min="0" step="any"
@@ -252,27 +273,63 @@ function PrivateVault() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {notes.map(n => (
-            <div key={n.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm group hover:shadow-md transition-all relative">
-              <button 
-                onClick={() => deleteNote(n.id)}
-                className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center bg-red-50 text-red-500 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 hover:text-white"
-                title="Delete Note permanently"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-              <div className="flex justify-between items-start mb-2 pr-10">
-                <h3 className="font-bold text-slate-900 truncate">{n.title}</h3>
-                <span className="bg-red-50 text-red-600 font-bold px-3 py-1 rounded-lg text-sm shrink-0">
-                  Rs. {Number(n.amount || 0).toLocaleString()}
-                </span>
+          {notes.map(n => {
+            const isEditing = editingId === n.id;
+            return (
+              <div key={n.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm group hover:shadow-md transition-all relative">
+                {isEditing ? (
+                  <form onSubmit={handleEditUpdate} className="space-y-4">
+                    <input 
+                      value={editForm.title} onChange={e => setEditForm({...editForm, title: e.target.value})}
+                      className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-sm font-bold"
+                    />
+                    <input 
+                      type="number" value={editForm.amount} onChange={e => setEditForm({...editForm, amount: e.target.value})}
+                      className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-sm font-bold"
+                    />
+                    <textarea 
+                      value={editForm.content} onChange={e => setEditForm({...editForm, content: e.target.value})}
+                      className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-sm"
+                      rows={3}
+                    />
+                    <div className="flex gap-2">
+                       <button type="submit" className="flex-1 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold transition-all">Save Changes</button>
+                       <button type="button" onClick={() => setEditingId(null)} className="px-4 py-2 bg-slate-100 text-slate-500 rounded-xl text-xs font-bold">Cancel</button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <div className="absolute top-4 right-4 flex items-center gap-2 transition-all">
+                      <button 
+                        onClick={() => startEdit(n)}
+                        className="w-8 h-8 flex items-center justify-center bg-blue-50 text-blue-500 rounded-lg hover:bg-blue-500 hover:text-white transition-all"
+                        title="Edit Note"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => deleteNote(n.id)}
+                        className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-all"
+                        title="Delete Note permanently"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:justify-between items-start mb-2 pr-20 gap-2">
+                      <h3 className="font-bold text-slate-900 truncate w-full sm:w-auto">{n.title}</h3>
+                      <span className="bg-red-50 text-red-600 font-bold px-3 py-1 rounded-lg text-sm shrink-0 whitespace-nowrap">
+                        Rs. {Number(n.amount || 0).toLocaleString()}
+                      </span>
+                    </div>
+                    <p className="text-sm text-slate-600 mb-4 whitespace-pre-wrap leading-relaxed">{n.content}</p>
+                    <div className="text-[10px] uppercase font-bold text-slate-400 tracking-widest pt-4 border-t border-slate-50">
+                      Secured: {new Date(n.created_at).toLocaleDateString('en-PK')}
+                    </div>
+                  </>
+                )}
               </div>
-              <p className="text-sm text-slate-600 mb-4 whitespace-pre-wrap leading-relaxed">{n.content}</p>
-              <div className="text-[10px] uppercase font-bold text-slate-400 tracking-widest pt-4 border-t border-slate-50">
-                Secured: {new Date(n.created_at).toLocaleDateString('en-PK')}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -18,7 +18,7 @@ function Auth({ onLogin }) {
     setIsLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API}/api/auth/login`, {
+      const res = await fetch(`${API}/api/auth/login/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
@@ -98,16 +98,16 @@ function Auth({ onLogin }) {
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-600/10 blur-[120px] rounded-full animate-pulse delay-700"></div>
       </div>
 
-      <div className="w-full max-w-[1100px] bg-white rounded-[40px] shadow-2xl shadow-blue-900/40 relative z-10 overflow-hidden flex min-h-[680px]">
+      <div className="w-full max-w-[1100px] bg-white rounded-[40px] shadow-2xl shadow-blue-900/40 relative z-10 overflow-hidden flex min-h-0 sm:min-h-[680px]">
         
         {/* Left Side: Branding & Image (Decorative) */}
         <div className="hidden lg:flex w-1/2 bg-[#001025] relative flex-col justify-between p-12 overflow-hidden border-r border-white/5">
            <div className="relative z-10">
-              <div className="h-32 mb-10 w-full flex items-center justify-start overflow-visible">
+              <div className="h-44 mb-10 w-full flex items-center justify-start overflow-visible">
                  <img
                    src="/logo.png"
                    alt="Abrar's Furniture"
-                   className="h-full object-contain transition-transform duration-500 hover:scale-105 [filter:drop-shadow(0_18px_40px_rgba(0,0,0,0.55))_drop-shadow(0_0_22px_rgba(197,160,89,0.28))] opacity-95"
+                   className="h-full object-contain transition-transform duration-500 hover:scale-105 [filter:drop-shadow(0_20px_50px_rgba(0,0,0,0.6))_drop-shadow(0_0_28px_rgba(197,160,89,0.35))] opacity-95"
                    onError={(e) => { e.currentTarget.src = '/logo.svg'; }}
                  />
               </div>

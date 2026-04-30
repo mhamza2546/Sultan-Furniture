@@ -34,7 +34,7 @@ function NewOrderModal({ open, onClose, onCreated }) {
     setSaving(true);
     setError('');
     try {
-      const res = await fetch(`${API}/api/sales`, {
+      const res = await fetch(`${API}/api/sales/new-order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -42,7 +42,7 @@ function NewOrderModal({ open, onClose, onCreated }) {
           product: form.product || 'Furniture Item',
           totalAmount: Number(form.totalAmount),
           downPayment: Number(form.downPayment || 0),
-          dueDate: form.dueDate || null
+          date: new Date().toISOString().split('T')[0] // Use current date for new orders
         })
       });
 
@@ -157,28 +157,30 @@ function NewOrderModal({ open, onClose, onCreated }) {
                 </div>
               </div>
 
-              <div className="bg-slate-50 border border-slate-200 rounded-3xl p-5 flex items-center justify-between">
+              <div className="bg-slate-50 border border-slate-200 rounded-3xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div>
                   <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400">Balance Due</p>
-                  <p className="text-xl font-black text-slate-900">Rs. {Number(balance).toLocaleString('en-PK')}</p>
+                  <p className={`text-xl font-black ${balance < 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                    {balance < 0 ? '-' : ''}Rs. {Math.abs(Number(balance)).toLocaleString('en-PK')}
+                  </p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 w-full sm:w-auto">
                   <button
                     type="button"
                     onClick={close}
                     disabled={saving}
-                    className="h-12 px-6 rounded-2xl font-bold text-sm transition-all text-slate-600 hover:bg-slate-200 bg-slate-100 disabled:opacity-50"
+                    className="flex-1 sm:flex-none h-12 px-6 rounded-2xl font-bold text-sm transition-all text-slate-600 hover:bg-slate-200 bg-slate-100 disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={saving}
-                    className={`h-12 px-6 rounded-2xl font-black text-sm transition-all active:scale-[0.98] flex items-center gap-2
+                    className={`flex-1 sm:flex-none h-12 px-6 rounded-2xl font-black text-sm transition-all active:scale-[0.98] flex items-center justify-center gap-2
                       ${success ? 'bg-emerald-500 text-white' : 'bg-slate-900 hover:bg-black text-white'}
                       disabled:opacity-70`}
                   >
-                    {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : success ? <><CheckCircle2 className="w-4 h-4" /> Created</> : 'Create Order'}
+                    {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : success ? <><CheckCircle2 className="w-4 h-4" /> Created</> : 'Create'}
                   </button>
                 </div>
               </div>

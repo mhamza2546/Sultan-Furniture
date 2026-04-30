@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, CheckCircle2, X, Plus, Trash2 } from 'lucide-react';
+import { Loader2, CheckCircle2, X, Plus, Trash2, Pencil } from 'lucide-react';
 import { API } from '../lib/api';
 
 function AccountsLedger() {
@@ -44,6 +44,27 @@ function AccountsLedger() {
       }
     } catch (err) { console.error(err); }
     setSaving(false);
+  };
+
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ customerName: '', product: '', totalAmount: '' });
+
+  const handleEdit = (sale) => {
+    setEditingId(sale.id);
+    setEditForm({ customerName: sale.customer_name, product: sale.product, totalAmount: sale.total_amount });
+  };
+
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    try {
+      await fetch(`${API}/api/sales/${editingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm)
+      });
+      setEditingId(null);
+      fetchSales();
+    } catch (err) { console.error(err); }
   };
 
   const handleDelete = async (id) => {
@@ -105,8 +126,8 @@ function AccountsLedger() {
       )}
 
       {/* Sales Table */}
-      <div className="table-responsive rounded-2xl border border-slate-100">
-        <table className="w-full text-left text-sm" style={{ minWidth: '540px' }}>
+      <div className="overflow-x-auto rounded-2xl border border-slate-100">
+        <table className="w-full text-left text-sm min-w-[700px]">
           <thead className="bg-slate-50 border-b border-slate-100">
             <tr className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
               <th className="px-6 py-4">Showroom Name</th>
@@ -119,16 +140,54 @@ function AccountsLedger() {
           </thead>
           <tbody className="divide-y divide-slate-50">
             {loading ? (
-              <tr><td colSpan="5" className="px-6 py-12 text-center">
+              <tr><td colSpan="6" className="px-6 py-12 text-center">
                 <div className="w-6 h-6 border-2 border-[#C5A059] border-t-transparent rounded-full animate-spin mx-auto"></div>
               </td></tr>
             ) : sales.length === 0 ? (
-              <tr><td colSpan="5" className="px-6 py-12 text-center text-slate-400 text-sm">
+              <tr><td colSpan="6" className="px-6 py-12 text-center text-slate-400 text-sm">
                 No deliveries recorded yet. Click "+ New Delivery" to log one.
               </td></tr>
             ) : sales.map(sale => {
+              const isEditing = editingId === sale.id;
+
+              if (isEditing) {
+                return (
+                  <tr key={sale.id} className="bg-slate-50">
+                    <td className="px-6 py-4">
+                      <input 
+                        value={editForm.customerName} 
+                        onChange={e => setEditForm({...editForm, customerName: e.target.value})}
+                        className="w-full px-3 py-1.5 border rounded-lg"
+                      />
+                    </td>
+                    <td className="px-6 py-4">
+                      <input 
+                        value={editForm.product} 
+                        onChange={e => setEditForm({...editForm, product: e.target.value})}
+                        className="w-full px-3 py-1.5 border rounded-lg"
+                      />
+                    </td>
+                    <td className="px-6 py-4">
+                      <input 
+                        type="number"
+                        value={editForm.totalAmount} 
+                        onChange={e => setEditForm({...editForm, totalAmount: Number(e.target.value)})}
+                        className="w-full px-3 py-1.5 border rounded-lg"
+                      />
+                    </td>
+                    <td colSpan="2"></td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button onClick={handleUpdate} className="p-2 text-emerald-600 bg-emerald-50 rounded-xl"><CheckCircle2 className="w-4 h-4"/></button>
+                        <button onClick={() => setEditingId(null)} className="p-2 text-slate-400 bg-slate-100 rounded-xl"><X className="w-4 h-4"/></button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              }
+
               return (
-                <tr key={sale.id} className="hover:bg-slate-50 transition-colors">
+                <tr key={sale.id} className="hover:bg-slate-50 transition-colors group">
                   <td className="px-6 py-4 font-bold text-slate-900">{sale.customer_name}</td>
                   <td className="px-6 py-4 text-slate-600">{sale.product}</td>
                   <td className="px-6 py-4 font-semibold text-emerald-600">Rs. {Number(sale.total_amount).toLocaleString()}</td>
@@ -137,9 +196,14 @@ function AccountsLedger() {
                   </td>
                   <td className="px-6 py-4 text-slate-400 text-xs">{new Date(sale.created_at).toLocaleDateString('en-PK')}</td>
                   <td className="px-6 py-4 text-right">
-                    <button onClick={() => handleDelete(sale.id)} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Delete record">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center justify-end gap-2 transition-all">
+                      <button onClick={() => handleEdit(sale)} className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all" title="Edit record">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleDelete(sale.id)} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Delete record">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );

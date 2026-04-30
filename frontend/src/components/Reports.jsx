@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Calendar, Search, Package, Users, TrendingUp, ShoppingCart,
-  ArrowUp, ArrowDown, Loader2, AlertCircle, ClipboardList
+  ArrowUp, ArrowDown, Loader2, AlertCircle, ClipboardList, Briefcase
 } from 'lucide-react';
 import { API } from '../lib/api';
 
@@ -131,14 +131,7 @@ function Reports() {
             <StatCard icon={ShoppingCart} label="Sales" value={`Rs. ${Number(data.summary.totalSales).toLocaleString()}`} color="text-blue-600" bg="bg-blue-50" />
           </div>
 
-          {/* Monthly manufacturing summary */}
-          {mode === 'month' && data?.summary && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <StatCard icon={ClipboardList} label="Jobs Created" value={data.summary.jobsCreated ?? 0} color="text-slate-700" bg="bg-slate-50" />
-              <StatCard icon={TrendingUp} label="Jobs Forwarded" value={data.summary.jobsForwarded ?? 0} color="text-indigo-700" bg="bg-indigo-50" />
-              <StatCard icon={Package} label="Jobs Finished" value={data.summary.jobsFinished ?? 0} color="text-emerald-700" bg="bg-emerald-50" />
-            </div>
-          )}
+
 
           {/* Inventory Logs */}
           <Section title="Inventory Movements" icon={Package} count={data.inventoryLogs.length}>
@@ -146,33 +139,90 @@ function Reports() {
               ? <Empty text="No inventory movement recorded for this date" />
               : <div className="table-responsive"><table className="w-full text-sm">
                   <thead><tr className="text-[10px] uppercase tracking-widest text-slate-400 font-bold border-b border-slate-100">
-                    <th className="pb-3 text-left">Material</th>
-                    <th className="pb-3 text-left">Type</th>
-                    <th className="pb-3 text-left">Qty</th>
-                    <th className="pb-3 text-left">Reason</th>
-                    <th className="pb-3 text-left">Time</th>
+                    <th className="pb-3 text-left pl-4">Date / Time</th>
+                    <th className="pb-3 text-left px-4">Material</th>
+                    <th className="pb-3 text-left px-4">Reason</th>
+                    <th className="pb-3 text-right px-4 whitespace-nowrap">Stock In (+)</th>
+                    <th className="pb-3 text-right px-4 whitespace-nowrap">Stock Out (-)</th>
                   </tr></thead>
                   <tbody className="divide-y divide-slate-50">
-                    {data.inventoryLogs.map(l => (
-                      <tr key={l.id} className="hover:bg-slate-50">
-                        <td className="py-3 font-semibold text-slate-800">{l.material_name}</td>
-                        <td className="py-3">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${l.type === 'IN' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
-                            {l.type}
-                          </span>
-                        </td>
-                        <td className="py-3 text-slate-600">{l.qty}</td>
-                        <td className="py-3 text-slate-400 text-xs">{l.reason}</td>
-                        <td className="py-3 text-slate-400 text-xs">{new Date(l.created_at).toLocaleTimeString('en-PK')}</td>
-                      </tr>
-                    ))}
+                    {data.inventoryLogs.map((l, i) => {
+                      const qty = Number(l.qty) || 0;
+                      const isIn = String(l.type).toUpperCase() === 'IN';
+                      return (
+                        <tr key={l.id || i} className="hover:bg-slate-50">
+                          <td className="py-4 pl-4 whitespace-nowrap">
+                            <p className="text-xs font-black text-slate-900">{new Date(l.created_at).toLocaleDateString('en-GB')}</p>
+                            <p className="text-[10px] text-slate-400 font-bold mt-0.5">{new Date(l.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                          </td>
+                          <td className="py-4 px-4 font-semibold text-slate-800">{l.material_name}</td>
+                          <td className="py-4 px-4 text-slate-500 text-xs italic">{l.reason || '—'}</td>
+                          <td className="py-4 px-4 text-right font-black tabular-nums text-emerald-600 whitespace-nowrap">
+                            {isIn ? `${qty.toLocaleString()} units` : <span className="opacity-10">—</span>}
+                          </td>
+                          <td className="py-4 px-4 text-right font-black tabular-nums text-red-500 whitespace-nowrap">
+                            {!isIn ? `${qty.toLocaleString()} units` : <span className="opacity-10">—</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
-                  <tfoot className="bg-slate-50 font-bold border-t-2 border-slate-200">
+                  <tfoot className="bg-slate-900 font-bold">
                     <tr>
-                      <td colSpan="2" className="py-3 text-right pr-4 text-slate-500 uppercase tracking-widest text-[10px] font-black">Daily Volume Given/Taken</td>
-                      <td colSpan="3" className="py-3 text-slate-800">
-                        <span className="text-emerald-600">{data.summary.totalMaterialIn} IN</span> / <span className="text-red-500">{data.summary.totalMaterialOut} OUT</span>
+                      <td colSpan="3" className="py-4 pl-4 text-[10px] uppercase tracking-widest text-[#C5A059]">Total Inventory Movement</td>
+                      <td className="py-4 px-4 text-right text-emerald-400 font-black tabular-nums whitespace-nowrap">
+                        {data.summary.totalMaterialIn.toLocaleString()} units IN
                       </td>
+                      <td className="py-4 pr-4 text-right text-red-400 font-black tabular-nums whitespace-nowrap">
+                        {data.summary.totalMaterialOut.toLocaleString()} units OUT
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table></div>
+            }
+          </Section>
+          {/* Vendor Purchases */}
+          <Section title="Vendor Purchases" icon={Briefcase} count={(data.vendorPurchases || []).length}>
+            {!(data.vendorPurchases || []).length
+              ? <Empty text="No vendor purchases recorded for this date" />
+              : <div className="table-responsive"><table className="w-full text-sm">
+                  <thead><tr className="text-[10px] uppercase tracking-widest text-slate-400 font-bold border-b border-slate-100">
+                    <th className="pb-3 text-left pl-4">Date</th>
+                    <th className="pb-3 text-left px-4">Vendor</th>
+                    <th className="pb-3 text-left px-4">Description</th>
+                    <th className="pb-3 text-right px-4 whitespace-nowrap">Bill Amt (+)</th>
+                    <th className="pb-3 text-right px-4 whitespace-nowrap">Paid (-)</th>
+                    <th className="pb-3 text-right px-4 whitespace-nowrap">Remaining</th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {data.vendorPurchases.map((v, i) => {
+                      const amt = Number(v.amount) || 0;
+                      const isBill = String(v.type).toUpperCase() === 'BILL';
+                      const isPayment = String(v.type).toUpperCase() === 'PAYMENT';
+                      return (
+                        <tr key={v.id || i} className="hover:bg-slate-50">
+                          <td className="py-4 text-xs font-black text-slate-900 pl-4 whitespace-nowrap">{new Date(v.created_at).toLocaleDateString('en-GB')}</td>
+                          <td className="py-4 font-semibold text-slate-800 px-4">{v.vendor_name}</td>
+                          <td className="py-4 text-slate-500 px-4 italic text-xs">{v.description}</td>
+                          <td className="py-4 text-right px-4 font-black tabular-nums text-slate-900 whitespace-nowrap">
+                            {isBill ? `₨ ${amt.toLocaleString()}` : <span className="opacity-10">—</span>}
+                          </td>
+                          <td className="py-4 text-right px-4 font-black tabular-nums text-emerald-600 whitespace-nowrap">
+                            {isPayment ? `₨ ${amt.toLocaleString()}` : <span className="opacity-10">—</span>}
+                          </td>
+                          <td className="py-4 text-right px-4 font-black tabular-nums text-orange-500 whitespace-nowrap">
+                            {isBill ? `₨ ${amt.toLocaleString()}` : <span className="opacity-10">—</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot className="bg-slate-900 font-bold">
+                    <tr>
+                      <td colSpan="3" className="py-4 pl-4 text-[10px] uppercase tracking-widest text-[#C5A059]">Gross Vendor Summary</td>
+                      <td className="py-4 px-4 text-right text-white font-black tabular-nums whitespace-nowrap">₨ {(data.summary.totalVendorBills || 0).toLocaleString()}</td>
+                      <td className="py-4 px-4 text-right text-emerald-400 font-black tabular-nums whitespace-nowrap">₨ {(data.summary.totalVendorPaid || 0).toLocaleString()}</td>
+                      <td className="py-4 pr-4 text-right text-orange-400 font-black tabular-nums whitespace-nowrap">₨ {((data.summary.totalVendorBills || 0) - (data.summary.totalVendorPaid || 0)).toLocaleString()}</td>
                     </tr>
                   </tfoot>
                 </table></div>
@@ -182,32 +232,48 @@ function Reports() {
           {/* Labour Payouts */}
           <Section title="Labour Payouts" icon={Users} count={data.labourPayouts.length}>
             {data.labourPayouts.length === 0
-              ? <Empty text="No labour payments recorded for this date" />
+              ? <Empty text="No labour transactions recorded for this date" />
               : <div className="table-responsive"><table className="w-full text-sm">
                   <thead><tr className="text-[10px] uppercase tracking-widest text-slate-400 font-bold border-b border-slate-100">
-                    <th className="pb-3 text-left">Worker</th>
-                    <th className="pb-3 text-left">Job</th>
-                    <th className="pb-3 text-left">Qty</th>
-                    <th className="pb-3 text-left">Rate</th>
-                    <th className="pb-3 text-left">Total</th>
-                    <th className="pb-3 text-left">Time</th>
+                    <th className="pb-3 text-left pl-4">Date</th>
+                    <th className="pb-3 text-left px-4">Worker</th>
+                    <th className="pb-3 text-left px-4">Description</th>
+                    <th className="pb-3 text-right px-4 whitespace-nowrap">Work Amount (+)</th>
+                    <th className="pb-3 text-right px-4 whitespace-nowrap">Paid (-)</th>
+                    <th className="pb-3 text-right px-4 whitespace-nowrap">Advance (-)</th>
                   </tr></thead>
                   <tbody className="divide-y divide-slate-50">
-                    {data.labourPayouts.map(p => (
-                      <tr key={p.id} className="hover:bg-slate-50">
-                        <td className="py-3 font-semibold text-slate-800">{p.worker_name}</td>
-                        <td className="py-3 text-slate-600">{p.job_type}</td>
-                        <td className="py-3 text-slate-600">{p.quantity}</td>
-                        <td className="py-3 text-slate-600">Rs. {Number(p.rate_per_unit).toLocaleString()}</td>
-                        <td className="py-3 font-bold text-emerald-600">Rs. {Number(p.total_payout).toLocaleString()}</td>
-                        <td className="py-3 text-slate-400 text-xs">{new Date(p.created_at).toLocaleTimeString('en-PK')}</td>
-                      </tr>
-                    ))}
+                    {data.labourPayouts.map(p => {
+                      const amt = Number(p.amount) || 0;
+                      const isEarning = String(p.type).toUpperCase() === 'EARNING';
+                      const isAdvance = !isEarning && String(p.description || '').toLowerCase().includes('advance');
+                      const isPaid = !isEarning && !isAdvance;
+                      return (
+                        <tr key={p.id} className="hover:bg-slate-50">
+                          <td className="py-4 text-xs font-black text-slate-900 pl-4 whitespace-nowrap">{new Date(p.created_at).toLocaleDateString('en-GB')}</td>
+                          <td className="py-4 font-semibold text-slate-800 px-4">{p.worker_name}</td>
+                          <td className="py-4 text-slate-500 px-4 italic text-xs">{p.description}</td>
+                          <td className="py-4 text-right px-4 font-black tabular-nums text-emerald-600 whitespace-nowrap">
+                            {isEarning ? `₨ ${amt.toLocaleString()}` : <span className="opacity-10">—</span>}
+                          </td>
+                          <td className="py-4 text-right px-4 font-black tabular-nums text-blue-500 whitespace-nowrap">
+                            {isPaid ? `₨ ${amt.toLocaleString()}` : <span className="opacity-10">—</span>}
+                          </td>
+                          <td className="py-4 text-right px-4 font-black tabular-nums text-red-500 whitespace-nowrap">
+                            {isAdvance ? `₨ ${amt.toLocaleString()}` : <span className="opacity-10">—</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
-                  <tfoot className="bg-emerald-50/50 font-bold border-t-2 border-emerald-100">
+                  <tfoot className="bg-slate-900 font-bold">
                     <tr>
-                      <td colSpan="4" className="py-3 text-right pr-4 text-emerald-700/70 uppercase tracking-widest text-[10px] font-black">Gross Labour Total</td>
-                      <td colSpan="2" className="py-3 text-emerald-700 text-lg font-black">Rs. {Number(data.summary.totalLabourPaid).toLocaleString()}</td>
+                      <td colSpan="3" className="py-4 pl-4 text-[10px] uppercase tracking-widest text-[#C5A059]">Gross Labour Summary</td>
+                      <td className="py-4 px-4 text-right text-emerald-400 font-black tabular-nums whitespace-nowrap">₨ {(data.summary.totalLabourEarned || 0).toLocaleString()}</td>
+                      <td className="py-4 px-4 text-right text-blue-400 font-black tabular-nums whitespace-nowrap">₨ {(data.summary.totalLabourPaid || 0).toLocaleString()}</td>
+                      <td className="py-4 pr-4 text-right text-red-400 font-black tabular-nums whitespace-nowrap">
+                        ₨ {data.labourPayouts.filter(p => String(p.description || '').toLowerCase().includes('advance') && String(p.type).toUpperCase() !== 'EARNING').reduce((s, p) => s + Number(p.amount || 0), 0).toLocaleString()}
+                      </td>
                     </tr>
                   </tfoot>
                 </table></div>
@@ -215,82 +281,46 @@ function Reports() {
           </Section>
 
           {/* Sales */}
-          <Section title="Sales & Receipts" icon={TrendingUp} count={data.salesRecords.length}>
+          <Section title="Showroom Sales" icon={TrendingUp} count={data.salesRecords.length}>
             {data.salesRecords.length === 0
               ? <Empty text="No sales recorded for this date" />
               : <div className="table-responsive"><table className="w-full text-sm">
                   <thead><tr className="text-[10px] uppercase tracking-widest text-slate-400 font-bold border-b border-slate-100">
-                    <th className="pb-3 text-left">Customer</th>
-                    <th className="pb-3 text-left">Product</th>
-                    <th className="pb-3 text-left">Total</th>
-                    <th className="pb-3 text-left">Paid</th>
-                    <th className="pb-3 text-left">Balance</th>
+                    <th className="pb-3 text-left pl-4">Customer</th>
+                    <th className="pb-3 text-left px-4">Product</th>
+                    <th className="pb-3 text-right px-4 whitespace-nowrap">Sale (+)</th>
+                    <th className="pb-3 text-right px-4 whitespace-nowrap">Received (-)</th>
+                    <th className="pb-3 text-right px-4 whitespace-nowrap">Remaining</th>
+                    <th className="pb-3 text-right px-4 whitespace-nowrap">Net Balance</th>
                   </tr></thead>
                   <tbody className="divide-y divide-slate-50">
-                    {data.salesRecords.map(s => (
+                    {data.salesRecords.map(s => {
+                      const sale = Number(s.total_amount) || 0;
+                      const received = Number(s.down_payment) || 0;
+                      const remaining = sale - received;
+                      return (
                       <tr key={s.id} className="hover:bg-slate-50">
-                        <td className="py-3 font-semibold text-slate-800">{s.customer_name}</td>
-                        <td className="py-3 text-slate-600">{s.product}</td>
-                        <td className="py-3 font-bold text-blue-600">Rs. {Number(s.total_amount).toLocaleString()}</td>
-                        <td className="py-3 text-emerald-600 font-semibold">Rs. {Number(s.down_payment).toLocaleString()}</td>
-                        <td className="py-3 font-bold text-slate-400">Rs. {Number(s.balance_due).toLocaleString()}</td>
+                        <td className="py-3 font-semibold text-slate-800 pl-4">{s.customer_name}</td>
+                        <td className="py-3 text-slate-600 px-4">{s.product}</td>
+                        <td className="py-3 text-right px-4 font-black tabular-nums text-slate-900 whitespace-nowrap">{sale > 0 ? `₨ ${sale.toLocaleString()}` : <span className="opacity-10">—</span>}</td>
+                        <td className="py-3 text-right px-4 font-black tabular-nums text-emerald-600 whitespace-nowrap">{received > 0 ? `₨ ${received.toLocaleString()}` : <span className="opacity-10">—</span>}</td>
+                        <td className="py-3 text-right px-4 font-black tabular-nums text-orange-500 whitespace-nowrap">{remaining !== 0 ? `₨ ${remaining.toLocaleString()}` : <span className="opacity-10">—</span>}</td>
+                        <td className="py-3 text-right px-4 font-black tabular-nums text-[#C5A059] whitespace-nowrap">₨ {Number(s.balance_due).toLocaleString()}</td>
                       </tr>
-                    ))}
+                    )})}
                   </tbody>
-                  <tfoot className="bg-blue-50/50 font-bold border-t-2 border-blue-100">
+                  <tfoot className="bg-slate-900 font-bold">
                     <tr>
-                      <td colSpan="2" className="py-3 text-right pr-4 text-blue-700/70 uppercase tracking-widest text-[10px] font-black">Gross Sales Revenue</td>
-                      <td colSpan="3" className="py-3 text-blue-700 text-lg font-black">Rs. {Number(data.summary.totalSales).toLocaleString()}</td>
+                      <td colSpan="2" className="py-4 pl-4 text-[10px] uppercase tracking-widest text-[#C5A059]">Gross Sales Revenue</td>
+                      <td className="py-4 px-4 text-right text-white font-black tabular-nums whitespace-nowrap">₨ {data.salesRecords.reduce((sum, s) => sum + Number(s.total_amount || 0), 0).toLocaleString()}</td>
+                      <td className="py-4 px-4 text-right text-emerald-400 font-black tabular-nums whitespace-nowrap">₨ {data.salesRecords.reduce((sum, s) => sum + Number(s.down_payment || 0), 0).toLocaleString()}</td>
+                      <td className="py-4 px-4 text-right text-orange-400 font-black tabular-nums whitespace-nowrap">₨ {data.salesRecords.reduce((sum, s) => sum + (Number(s.total_amount || 0) - Number(s.down_payment || 0)), 0).toLocaleString()}</td>
+                      <td className="py-4 pr-4"></td>
                     </tr>
                   </tfoot>
                 </table></div>
             }
           </Section>
-
-          {/* Jobs Created */}
-          <Section title="Production Jobs Started" icon={ClipboardList} count={data.jobsCreated.length}>
-            {data.jobsCreated.length === 0
-              ? <Empty text="No production jobs started on this date" />
-              : <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {data.jobsCreated.map(j => (
-                    <div key={j.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                      <div>
-                        <p className="font-bold text-slate-800 text-sm">{j.product}</p>
-                        <p className="text-xs text-slate-400 font-mono mt-0.5">{j.id}</p>
-                      </div>
-                      <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-bold border border-blue-100">{j.stage}</span>
-                    </div>
-                  ))}
-                </div>
-            }
-          </Section>
-
-          {/* Jobs Forwarded (monthly) */}
-          {mode === 'month' && Array.isArray(data.jobsForwarded) && (
-            <Section title="Jobs Forwarded (Stage Movements)" icon={TrendingUp} count={data.jobsForwarded.length}>
-              {data.jobsForwarded.length === 0
-                ? <Empty text="No stage movements logged for this month" />
-                : <table className="w-full text-sm">
-                    <thead><tr className="text-[10px] uppercase tracking-widest text-slate-400 font-bold border-b border-slate-100">
-                      <th className="pb-3 text-left">Job</th>
-                      <th className="pb-3 text-left">From</th>
-                      <th className="pb-3 text-left">To</th>
-                      <th className="pb-3 text-left">Time</th>
-                    </tr></thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {data.jobsForwarded.slice(0, 200).map(l => (
-                        <tr key={l.id} className="hover:bg-slate-50">
-                          <td className="py-3 font-semibold text-slate-800">{l.product} — {l.job_id}</td>
-                          <td className="py-3 text-slate-600">{l.from_stage}</td>
-                          <td className="py-3 text-slate-600">{l.to_stage}</td>
-                          <td className="py-3 text-slate-400 text-xs">{new Date(l.changed_at).toLocaleString('en-PK')}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-              }
-            </Section>
-          )}
         </div>
       )}
 

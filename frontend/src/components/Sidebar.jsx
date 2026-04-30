@@ -17,7 +17,6 @@ function Sidebar({ activeTab, setActiveTab, onLogout, hideLogo = false }) {
   const navItems = [
     { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
     { id: 'inventory', label: 'Inventory & Materials', icon: Boxes },
-    { id: 'manufacturing', label: 'Production Line', icon: Factory },
     { id: 'orders', label: 'Order Tracking', icon: Truck },
     { id: 'labour', label: 'Labour Ledger', icon: Users },
     { id: 'accounts', label: 'Showroom Sales', icon: Wallet },
@@ -29,12 +28,12 @@ function Sidebar({ activeTab, setActiveTab, onLogout, hideLogo = false }) {
     <aside className="w-72 bg-[#000B1A] text-slate-400 flex flex-col h-full shrink-0 border-r border-white/5">
       {/* Brand Logo — hidden in mobile offcanvas */}
       {!hideLogo && (
-        <div className="h-44 flex items-center justify-center p-8 border-b border-white/5 group bg-[#000B1A]">
-          <div className="relative w-full h-full flex items-center justify-center">
+        <div className="h-64 flex items-center justify-center p-2 border-b border-white/5 group bg-[#000B1A]">
+          <div className="relative w-full h-full flex items-center justify-center p-2">
             <img
               src="/logo.png"
               alt="Abrar's Furniture"
-              className="w-full h-auto max-h-full object-contain transition-all duration-700 group-hover:scale-105 [filter:drop-shadow(0_12px_30px_rgba(0,0,0,0.45))_drop-shadow(0_0_18px_rgba(197,160,89,0.25))] opacity-95"
+              className="w-full h-auto max-h-full object-contain transition-all duration-700 group-hover:scale-110 [filter:drop-shadow(0_15px_45px_rgba(0,0,0,0.65))_drop-shadow(0_0_30px_rgba(197,160,89,0.4))] opacity-95"
               onError={(e) => { e.currentTarget.src = '/logo.svg'; }}
             />
           </div>

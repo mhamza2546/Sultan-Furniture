@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, CheckCircle2, Users, TrendingUp, Trash2 } from 'lucide-react';
+import { Loader2, CheckCircle2, Users, TrendingUp, Trash2, Pencil, X } from 'lucide-react';
 import { API } from '../lib/api';
 
 function LabourPayouts() {
@@ -42,6 +42,28 @@ function LabourPayouts() {
       }
     } catch (err) { console.error(err); }
     setLoading(false);
+  };
+
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ workerName: '', jobType: '', quantity: 1, ratePerUnit: 0 });
+
+  const startEdit = (p) => {
+    setEditingId(p.id);
+    setEditForm({ workerName: p.worker_name, jobType: p.job_type, quantity: p.quantity, ratePerUnit: p.rate_per_unit });
+  };
+
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    const total = editForm.quantity * editForm.ratePerUnit;
+    try {
+      await fetch(`${API}/api/payouts/${editingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...editForm, totalPayout: total })
+      });
+      setEditingId(null);
+      fetchHistory();
+    } catch(err) { console.error(err); }
   };
 
   const handleDelete = async (id) => {
@@ -112,7 +134,7 @@ function LabourPayouts() {
       <div>
         <h5 className="text-base font-bold text-slate-900 mb-4">Recent Payouts History</h5>
         <div className="overflow-x-auto rounded-2xl border border-slate-100">
-          <table className="w-full text-left text-sm">
+          <table className="w-full text-left text-sm min-w-[800px]">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
                 <th className="px-6 py-4">Worker</th>
@@ -126,31 +148,60 @@ function LabourPayouts() {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {histLoading ? (
-                <tr><td colSpan="6" className="px-6 py-10 text-center">
+                <tr><td colSpan="7" className="px-6 py-10 text-center">
                   <div className="w-6 h-6 border-2 border-[#C5A059] border-t-transparent rounded-full animate-spin mx-auto"></div>
                 </td></tr>
               ) : history.length === 0 ? (
-                <tr><td colSpan="6" className="px-6 py-10 text-center text-slate-400 text-sm">No payout records yet</td></tr>
-              ) : history.map(p => (
-                <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4 font-semibold text-slate-800">{p.worker_name}</td>
-                  <td className="px-6 py-4 text-slate-600">{p.job_type}</td>
-                  <td className="px-6 py-4 text-slate-600">{p.quantity}</td>
-                  <td className="px-6 py-4 text-slate-600">Rs. {Number(p.rate_per_unit).toLocaleString()}</td>
-                  <td className="px-6 py-4 font-bold text-emerald-600">Rs. {Number(p.total_payout).toLocaleString()}</td>
-                  <td className="px-6 py-4 text-slate-400 text-xs">{new Date(p.created_at).toLocaleString('en-PK')}</td>
-                  <td className="px-6 py-4 text-right">
-                    <button onClick={() => handleDelete(p.id)} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Delete payout">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+                <tr><td colSpan="7" className="px-6 py-10 text-center text-slate-400 text-sm">No payout records yet</td></tr>
+              ) : history.map(p => {
+                const isEditing = editingId === p.id;
+                if (isEditing) {
+                  return (
+                    <tr key={p.id} className="bg-slate-50">
+                      <td className="px-6 py-4">
+                        <input value={editForm.workerName} onChange={e => setEditForm({...editForm, workerName: e.target.value})} className="w-full px-2 py-1 border rounded" />
+                      </td>
+                      <td className="px-6 py-4">
+                        <input value={editForm.jobType} onChange={e => setEditForm({...editForm, jobType: e.target.value})} className="w-full px-2 py-1 border rounded" />
+                      </td>
+                      <td className="px-6 py-4">
+                        <input type="number" value={editForm.quantity} onChange={e => setEditForm({...editForm, quantity: Number(e.target.value)})} className="w-16 px-2 py-1 border rounded" />
+                      </td>
+                      <td className="px-6 py-4">
+                        <input type="number" value={editForm.ratePerUnit} onChange={e => setEditForm({...editForm, ratePerUnit: Number(e.target.value)})} className="w-24 px-2 py-1 border rounded" />
+                      </td>
+                      <td colSpan="2"></td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                           <button onClick={handleUpdate} className="p-2 text-emerald-600 bg-emerald-50 rounded-xl"><CheckCircle2 className="w-4 h-4"/></button>
+                           <button onClick={() => setEditingId(null)} className="p-2 text-slate-400 bg-slate-100 rounded-xl"><X className="w-4 h-4"/></button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                }
+
+                return (
+                  <tr key={p.id} className="hover:bg-slate-50 transition-colors group">
+                    <td className="px-6 py-4 font-semibold text-slate-800">{p.worker_name}</td>
+                    <td className="px-6 py-4 text-slate-600">{p.job_type}</td>
+                    <td className="px-6 py-4 text-slate-600">{p.quantity}</td>
+                    <td className="px-6 py-4 text-slate-600">Rs. {Number(p.rate_per_unit).toLocaleString()}</td>
+                    <td className="px-6 py-4 font-bold text-emerald-600">Rs. {Number(p.total_payout).toLocaleString()}</td>
+                    <td className="px-6 py-4 text-slate-400 text-xs">{new Date(p.created_at).toLocaleString('en-PK')}</td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button onClick={() => startEdit(p)} className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all" title="Edit payout">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => handleDelete(p.id)} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Delete payout">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
   );
 }
 

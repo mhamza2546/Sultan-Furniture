@@ -239,6 +239,19 @@ app.delete('/api/materials/:id', async (req, res) => {
   }
 });
 
+app.put('/api/materials/:id', async (req, res) => {
+  try {
+    const { name, qty, unit, category } = req.body;
+    await pool.query(
+      'UPDATE materials SET name = ?, qty = ?, unit = ?, category = ? WHERE id = ?',
+      [name, qty, unit, category, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============================================================
 // INVENTORY LOGS
 // ============================================================
@@ -269,6 +282,16 @@ app.post('/api/jobs', async (req, res) => {
   try {
     const { id, product } = req.body;
     await pool.query('INSERT INTO jobs (id, product) VALUES (?, ?)', [id, product]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/jobs/:id', async (req, res) => {
+  try {
+    const { product } = req.body;
+    await pool.query('UPDATE jobs SET product = ? WHERE id = ?', [product, req.params.id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -357,6 +380,29 @@ app.post('/api/workers', async (req, res) => {
   }
 });
 
+app.put('/api/workers/:id', async (req, res) => {
+  try {
+    const { name, jobRole } = req.body;
+    await pool.query(
+      'UPDATE workers SET name = ?, job_role = ? WHERE id = ?',
+      [name, jobRole, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/workers/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM workers WHERE id = ?', [req.params.id]);
+    await pool.query('DELETE FROM worker_transactions WHERE worker_id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/workers/:id/transactions', async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM worker_transactions WHERE worker_id = ? ORDER BY created_at DESC', [req.params.id]);
@@ -369,14 +415,15 @@ app.get('/api/workers/:id/transactions', async (req, res) => {
 app.post('/api/workers/:id/transactions', async (req, res) => {
   const connection = await pool.getConnection();
   try {
-    const { type, amount, description } = req.body; // type: 'EARNING' or 'PAYMENT'
+    const { type, amount, description, date } = req.body; // type: 'EARNING' or 'PAYMENT'
     const workerId = req.params.id;
+    const txDate = date ? new Date(date) : new Date();
 
     await connection.beginTransaction();
 
     await connection.query(
-      'INSERT INTO worker_transactions (worker_id, type, amount, description) VALUES (?, ?, ?, ?)',
-      [workerId, type, amount, description]
+      'INSERT INTO worker_transactions (worker_id, type, amount, description, created_at) VALUES (?, ?, ?, ?, ?)',
+      [workerId, type, amount, description, txDate]
     );
 
     if (type === 'EARNING') {
@@ -395,35 +442,290 @@ app.post('/api/workers/:id/transactions', async (req, res) => {
   }
 });
 
+app.put('/api/workers/:id/transactions/:txId', async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+      const { txId } = req.params;
+      const { type, amount, description, date } = req.body;
+      const workerId = req.params.id;
+  
+      await connection.beginTransaction();
+  
+      // Get old transaction to reverse balance
+      const [oldTx] = await connection.query('SELECT * FROM worker_transactions WHERE id = ?', [txId]);
+      if (!oldTx.length) throw new Error('Transaction not found');
+      
+      const old = oldTx[0];
+      // Reverse old balance
+      if (old.type === 'EARNING') {
+          await connection.query('UPDATE workers SET balance = balance - ? WHERE id = ?', [old.amount, workerId]);
+      } else {
+          await connection.query('UPDATE workers SET balance = balance + ? WHERE id = ?', [old.amount, workerId]);
+      }
+  
+      // Update transaction
+      await connection.query(
+        'UPDATE worker_transactions SET type = ?, amount = ?, description = ?, created_at = ? WHERE id = ?',
+        [type, amount, description, new Date(date), txId]
+      );
+  
+      // Apply new balance
+      if (type === 'EARNING') {
+          await connection.query('UPDATE workers SET balance = balance + ? WHERE id = ?', [amount, workerId]);
+      } else {
+          await connection.query('UPDATE workers SET balance = balance - ? WHERE id = ?', [amount, workerId]);
+      }
+  
+      await connection.commit();
+      res.json({ success: true });
+    } catch (err) {
+      await connection.rollback();
+      res.status(500).json({ error: err.message });
+    } finally {
+      connection.release();
+    }
+});
+
+app.delete('/api/workers/:id/transactions/:txId', async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+      const { txId } = req.params;
+      const workerId = req.params.id;
+  
+      await connection.beginTransaction();
+  
+      const [oldTx] = await connection.query('SELECT * FROM worker_transactions WHERE id = ?', [txId]);
+      if (!oldTx.length) throw new Error('Transaction not found');
+      
+      const old = oldTx[0];
+      // Reverse balance
+      if (old.type === 'EARNING') {
+          await connection.query('UPDATE workers SET balance = balance - ? WHERE id = ?', [old.amount, workerId]);
+      } else {
+          await connection.query('UPDATE workers SET balance = balance + ? WHERE id = ?', [old.amount, workerId]);
+      }
+  
+      await connection.query('DELETE FROM worker_transactions WHERE id = ?', [txId]);
+  
+      await connection.commit();
+      res.json({ success: true });
+    } catch (err) {
+      await connection.rollback();
+      res.status(500).json({ error: err.message });
+    } finally {
+      connection.release();
+    }
+});
+
 // ============================================================
-// SALES & ACCOUNTS
+// CUSTOMER LEDGER (Showroom Sales Patterns)
 // ============================================================
 
-// GET all sales
-app.get('/api/sales', async (req, res) => {
+app.get('/api/customers', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM sales ORDER BY created_at DESC');
+    const [rows] = await pool.query('SELECT * FROM customers ORDER BY created_at DESC');
     res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/customers', async (req, res) => {
+  try {
+    const { name, jobRole } = req.body;
+    const [result] = await pool.query(
+      'INSERT INTO customers (name, job_role, balance) VALUES (?, ?, 0)',
+      [name, jobRole || 'Showroom Partner']
+    );
+    res.json({ success: true, id: result.insertId });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/customers/:id', async (req, res) => {
+  try {
+    const { name, jobRole } = req.body;
+    await pool.query(
+      'UPDATE customers SET name = ?, job_role = ? WHERE id = ?',
+      [name, jobRole, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/customers/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM customers WHERE id = ?', [req.params.id]);
+    await pool.query('DELETE FROM customer_transactions WHERE customer_id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/customers/:id/transactions', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM customer_transactions WHERE customer_id = ? ORDER BY created_at DESC', [req.params.id]);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/customers/:id/transactions', async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    const { type, amount, description, date } = req.body; // type: 'PURCHASE' or 'PAYMENT'
+    const customerId = req.params.id;
+    const txDate = date ? new Date(date) : new Date();
+
+    await connection.beginTransaction();
+
+    await connection.query(
+      'INSERT INTO customer_transactions (customer_id, type, amount, description, created_at) VALUES (?, ?, ?, ?, ?)',
+      [customerId, type, amount, description, txDate]
+    );
+
+    if (type === 'PURCHASE') {
+      await connection.query('UPDATE customers SET balance = balance + ? WHERE id = ?', [amount, customerId]);
+    } else if (type === 'PAYMENT') {
+      await connection.query('UPDATE customers SET balance = balance - ? WHERE id = ?', [amount, customerId]);
+    }
+
+    await connection.commit();
+    res.json({ success: true });
   } catch (err) {
+    await connection.rollback();
     res.status(500).json({ error: err.message });
+  } finally {
+    connection.release();
   }
 });
 
-// POST new sale
-app.post('/api/sales', async (req, res) => {
-  try {
-    const { customerName, product, totalAmount } = req.body;
-    // Wholesale fully paid mapping
-    const downPayment = totalAmount;
-    const balance = 0;
-    await pool.query(
-      'INSERT INTO sales (customer_name, product, total_amount, down_payment, balance_due, due_date) VALUES (?, ?, ?, ?, ?, ?)',
-      [customerName, product, totalAmount, downPayment, balance, null]
-    );
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+app.put('/api/customers/:id/transactions/:txId', async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+      const { txId } = req.params;
+      const { type, amount, description, date } = req.body;
+      const customerId = req.params.id;
+  
+      await connection.beginTransaction();
+  
+      const [oldTx] = await connection.query('SELECT * FROM customer_transactions WHERE id = ?', [txId]);
+      if (!oldTx.length) throw new Error('Transaction not found');
+      
+      const old = oldTx[0];
+      if (old.type === 'PURCHASE') {
+          await connection.query('UPDATE customers SET balance = balance - ? WHERE id = ?', [old.amount, customerId]);
+      } else {
+          await connection.query('UPDATE customers SET balance = balance + ? WHERE id = ?', [old.amount, customerId]);
+      }
+  
+      await connection.query(
+        'UPDATE customer_transactions SET type = ?, amount = ?, description = ?, created_at = ? WHERE id = ?',
+        [type, amount, description, new Date(date), txId]
+      );
+  
+      if (type === 'PURCHASE') {
+          await connection.query('UPDATE customers SET balance = balance + ? WHERE id = ?', [amount, customerId]);
+      } else {
+          await connection.query('UPDATE customers SET balance = balance - ? WHERE id = ?', [amount, customerId]);
+      }
+  
+      await connection.commit();
+      res.json({ success: true });
+    } catch (err) {
+      await connection.rollback();
+      res.status(500).json({ error: err.message });
+    } finally {
+      connection.release();
+    }
+});
+
+app.delete('/api/customers/:id/transactions/:txId', async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+      const { txId } = req.params;
+      const customerId = req.params.id;
+  
+      await connection.beginTransaction();
+  
+      const [oldTx] = await connection.query('SELECT * FROM customer_transactions WHERE id = ?', [txId]);
+      if (!oldTx.length) throw new Error('Transaction not found');
+      
+      const old = oldTx[0];
+      if (old.type === 'PURCHASE') {
+          await connection.query('UPDATE customers SET balance = balance - ? WHERE id = ?', [old.amount, customerId]);
+      } else {
+          await connection.query('UPDATE customers SET balance = balance + ? WHERE id = ?', [old.amount, customerId]);
+      }
+  
+      await connection.query('DELETE FROM customer_transactions WHERE id = ?', [txId]);
+  
+      await connection.commit();
+      res.json({ success: true });
+    } catch (err) {
+      await connection.rollback();
+      res.status(500).json({ error: err.message });
+    } finally {
+      connection.release();
+    }
+});
+
+app.post('/api/sales/new-order', async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const { customerName, product, totalAmount, downPayment, date } = req.body;
+        const txDate = date ? new Date(date) : new Date();
+
+        await connection.beginTransaction();
+
+        // 1. Find or create customer
+        const [customers] = await connection.query('SELECT id FROM customers WHERE name = ?', [customerName]);
+        let customerId;
+        if (customers.length > 0) {
+            customerId = customers[0].id;
+        } else {
+            const [newCust] = await connection.query(
+                'INSERT INTO customers (name, job_role, balance) VALUES (?, ?, 0)',
+                [customerName, 'Showroom Partner']
+            );
+            customerId = newCust.insertId;
+        }
+
+        // 2. Record Purchase
+        await connection.query(
+            'INSERT INTO customer_transactions (customer_id, type, amount, description, created_at) VALUES (?, ?, ?, ?, ?)',
+            [customerId, 'PURCHASE', totalAmount, product || 'Furniture Delivery', txDate]
+        );
+
+        // 3. Record Payment (if any)
+        if (Number(downPayment) > 0) {
+            await connection.query(
+                'INSERT INTO customer_transactions (customer_id, type, amount, description, created_at) VALUES (?, ?, ?, ?, ?)',
+                [customerId, 'PAYMENT', downPayment, 'Down Payment / Advance', txDate]
+            );
+        }
+
+        // 4. Update Customer Balance
+        const finalBalance = Number(totalAmount) - Number(downPayment || 0);
+        await connection.query('UPDATE customers SET balance = balance + ? WHERE id = ?', [finalBalance, customerId]);
+
+        await connection.commit();
+        res.json({ success: true });
+    } catch (err) {
+        await connection.rollback();
+        res.status(500).json({ error: err.message });
+    } finally {
+        connection.release();
+    }
+});
+
+app.get('/api/reports/latest-sales', async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            `SELECT ct.*, c.name as customer_name, ct.description as product
+             FROM customer_transactions ct
+             JOIN customers c ON ct.customer_id = c.id
+             WHERE ct.type = 'PURCHASE'
+             ORDER BY ct.created_at DESC
+             LIMIT 10`
+        );
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ============================================================
@@ -442,33 +744,67 @@ app.get('/api/reports', async (req, res) => {
     );
 
     const [labourPayouts] = await pool.query(
-      `SELECT * FROM labour_payouts WHERE DATE(created_at) = ? ORDER BY created_at DESC`,
+      `SELECT wt.*, w.name as worker_name 
+       FROM worker_transactions wt
+       JOIN workers w ON wt.worker_id = w.id
+       WHERE DATE(wt.created_at) = ? ORDER BY wt.created_at DESC`,
       [date]
     );
 
-    const [salesRecords] = await pool.query(
-      `SELECT * FROM sales WHERE DATE(created_at) = ? ORDER BY created_at DESC`,
+    const [salesRecordsRaw] = await pool.query(
+      `SELECT 
+        ct.id, 
+        ct.amount as total_amount,
+        ct.description as product,
+        c.name as customer_name,
+        ct.created_at,
+        (
+          SELECT SUM(amount) 
+          FROM customer_transactions 
+          WHERE customer_id = ct.customer_id 
+          AND type = 'PAYMENT' 
+          AND (description LIKE CONCAT('%', ct.description, '%') OR description LIKE '%Down Payment%')
+          AND DATE(created_at) = DATE(ct.created_at)
+        ) as down_payment
+       FROM customer_transactions ct
+       JOIN customers c ON ct.customer_id = c.id
+       WHERE ct.type = 'PURCHASE' AND DATE(ct.created_at) = ?
+       ORDER BY ct.created_at DESC`,
       [date]
     );
 
-    const [jobsCreated] = await pool.query(
-      `SELECT * FROM jobs WHERE DATE(created_at) = ? ORDER BY created_at DESC`,
+    const salesRecords = salesRecordsRaw.map(s => ({
+      ...s,
+      down_payment: s.down_payment || 0,
+      balance_due: Number(s.total_amount) - Number(s.down_payment || 0)
+    }));
+
+    // Vendor purchases
+    const [vendorPurchases] = await pool.query(
+      `SELECT vt.*, v.name as vendor_name 
+       FROM vendor_transactions vt
+       JOIN vendors v ON vt.vendor_id = v.id
+       WHERE DATE(vt.created_at) = ? ORDER BY vt.created_at DESC`,
       [date]
     );
 
     // Summary totals
-    const totalLabourPaid = labourPayouts.reduce((sum, p) => sum + parseFloat(p.total_payout), 0);
-    const totalSales = salesRecords.reduce((sum, s) => sum + parseFloat(s.total_amount), 0);
+    const totalLabourEarned = labourPayouts.filter(p => p.type === 'EARNING').reduce((sum, p) => sum + parseFloat(p.amount), 0);
+    const totalLabourPaid = labourPayouts.filter(p => p.type === 'PAYMENT').reduce((sum, p) => sum + parseFloat(p.amount), 0);
+    const totalSales = salesRecords.reduce((sum, s) => sum + parseFloat(s.amount), 0);
     const totalMaterialIn = inventoryLogs.filter(l => l.type === 'IN').reduce((sum, l) => sum + parseFloat(l.qty), 0);
     const totalMaterialOut = inventoryLogs.filter(l => l.type === 'OUT').reduce((sum, l) => sum + parseFloat(l.qty), 0);
+    const totalVendorBills = vendorPurchases.filter(v => v.type === 'BILL').reduce((sum, v) => sum + parseFloat(v.amount || 0), 0);
+    const totalVendorPaid = vendorPurchases.filter(v => v.type === 'PAYMENT').reduce((sum, v) => sum + parseFloat(v.amount || 0), 0);
 
     res.json({
       date,
-      summary: { totalLabourPaid, totalSales, totalMaterialIn, totalMaterialOut },
+      summary: { totalLabourEarned, totalLabourPaid, totalSales, totalMaterialIn, totalMaterialOut, totalVendorBills, totalVendorPaid },
       inventoryLogs,
       labourPayouts,
       salesRecords,
-      jobsCreated
+      vendorPurchases,
+      jobsCreated: [] // Removed production jobs
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -495,57 +831,84 @@ app.get('/api/reports/month', async (req, res) => {
     );
 
     const [labourPayouts] = await pool.query(
-      `SELECT * FROM labour_payouts
-       WHERE created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 MONTH)
-       ORDER BY created_at DESC`,
+      `SELECT wt.*, w.name as worker_name 
+       FROM worker_transactions wt
+       JOIN workers w ON wt.worker_id = w.id
+       WHERE wt.created_at >= ? AND wt.created_at < DATE_ADD(?, INTERVAL 1 MONTH)
+       ORDER BY wt.created_at DESC`,
       [start, start]
     );
 
-    const [salesRecords] = await pool.query(
-      `SELECT * FROM sales
-       WHERE created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 MONTH)
-       ORDER BY created_at DESC`,
+    const [salesRecordsRaw] = await pool.query(
+      `SELECT 
+        ct.id, 
+        ct.amount as total_amount,
+        ct.description as product,
+        c.name as customer_name,
+        ct.created_at,
+        (
+          SELECT SUM(amount) 
+          FROM customer_transactions 
+          WHERE customer_id = ct.customer_id 
+          AND type = 'PAYMENT' 
+          AND (description LIKE CONCAT('%', ct.description, '%') OR description LIKE '%Down Payment%')
+          AND DATE(created_at) = DATE(ct.created_at)
+        ) as down_payment
+       FROM customer_transactions ct
+       JOIN customers c ON ct.customer_id = c.id
+       WHERE ct.type = 'PURCHASE' 
+         AND ct.created_at >= ? AND ct.created_at < DATE_ADD(?, INTERVAL 1 MONTH)
+       ORDER BY ct.created_at DESC`,
       [start, start]
     );
 
-    const [jobsCreated] = await pool.query(
-      `SELECT * FROM jobs
-       WHERE created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 MONTH)
-       ORDER BY created_at DESC`,
-      [start, start]
-    );
+    const salesRecords = salesRecordsRaw.map(s => ({
+      ...s,
+      down_payment: s.down_payment || 0,
+      balance_due: Number(s.total_amount) - Number(s.down_payment || 0)
+    }));
 
-    const [jobsForwarded] = await pool.query(
-      `SELECT * FROM job_stage_logs
-       WHERE changed_at >= ? AND changed_at < DATE_ADD(?, INTERVAL 1 MONTH)
-       ORDER BY changed_at DESC`,
+    // Vendor purchases
+    const [vendorPurchases] = await pool.query(
+      `SELECT vt.*, v.name as vendor_name 
+       FROM vendor_transactions vt
+       JOIN vendors v ON vt.vendor_id = v.id
+       WHERE vt.created_at >= ? AND vt.created_at < DATE_ADD(?, INTERVAL 1 MONTH)
+       ORDER BY vt.created_at DESC`,
       [start, start]
     );
 
     // Summary totals
-    const totalLabourPaid = labourPayouts.reduce((sum, p) => sum + parseFloat(p.total_payout), 0);
-    const totalSales = salesRecords.reduce((sum, s) => sum + parseFloat(s.total_amount), 0);
+    const totalLabourEarned = labourPayouts.filter(p => p.type === 'EARNING').reduce((sum, p) => sum + parseFloat(p.amount), 0);
+    const totalLabourPaid = labourPayouts.filter(p => p.type === 'PAYMENT').reduce((sum, p) => sum + parseFloat(p.amount), 0);
+    const totalLabourAdvance = labourPayouts.filter(p => p.type === 'PAYMENT' && String(p.description || '').toLowerCase().includes('advance')).reduce((sum, p) => sum + parseFloat(p.amount), 0);
+    const totalSales = salesRecords.reduce((sum, s) => sum + parseFloat(s.total_amount || 0), 0);
     const totalMaterialIn = inventoryLogs.filter(l => l.type === 'IN').reduce((sum, l) => sum + parseFloat(l.qty), 0);
     const totalMaterialOut = inventoryLogs.filter(l => l.type === 'OUT').reduce((sum, l) => sum + parseFloat(l.qty), 0);
-
-    const jobsFinished = jobsForwarded.filter(l => l.to_stage === 'Finished').length;
+    const totalVendorBills = vendorPurchases.filter(v => v.type === 'BILL').reduce((sum, v) => sum + parseFloat(v.amount || 0), 0);
+    const totalVendorPaid = vendorPurchases.filter(v => v.type === 'PAYMENT').reduce((sum, v) => sum + parseFloat(v.amount || 0), 0);
 
     res.json({
       month,
       summary: {
+        totalLabourEarned,
         totalLabourPaid,
+        totalLabourAdvance,
         totalSales,
         totalMaterialIn,
         totalMaterialOut,
-        jobsCreated: jobsCreated.length,
-        jobsForwarded: jobsForwarded.length,
-        jobsFinished
+        totalVendorBills,
+        totalVendorPaid,
+        jobsCreated: 0,
+        jobsForwarded: 0,
+        jobsFinished: 0
       },
       inventoryLogs,
       labourPayouts,
       salesRecords,
-      jobsCreated,
-      jobsForwarded
+      vendorPurchases,
+      jobsCreated: [],
+      jobsForwarded: []
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -600,9 +963,33 @@ app.delete('/api/vault/:id', async (req, res) => {
   }
 });
 
+app.put('/api/vault/:id', async (req, res) => {
+  try {
+    const { title, content, amount } = req.body;
+    await pool.query(
+      'UPDATE private_vault SET title = ?, content = ?, amount = ? WHERE id = ?',
+      [title, content, amount, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.delete('/api/sales/:id', async (req, res) => {
   try {
     await pool.query('DELETE FROM sales WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/sales/:id', async (req, res) => {
+  try {
+    const { customerName, product, totalAmount } = req.body;
+    await pool.query(
+      'UPDATE sales SET customer_name = ?, product = ?, total_amount = ? WHERE id = ?',
+      [customerName, product, totalAmount, req.params.id]
+    );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -614,12 +1001,190 @@ app.delete('/api/payouts/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.put('/api/payouts/:id', async (req, res) => {
+  try {
+    const { workerName, jobType, quantity, ratePerUnit, totalPayout } = req.body;
+    await pool.query(
+      'UPDATE labour_payouts SET worker_name = ?, job_type = ?, quantity = ?, rate_per_unit = ?, total_payout = ? WHERE id = ?',
+      [workerName, jobType, quantity, ratePerUnit, totalPayout, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.delete('/api/jobs/:id', async (req, res) => {
   try {
     await pool.query('DELETE FROM jobs WHERE id = ?', [req.params.id]);
     await pool.query('DELETE FROM job_stage_logs WHERE job_id = ?', [req.params.id]);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============================================================
+// VENDORS — Supplier Ledger
+// ============================================================
+
+app.get('/api/vendors', async (req, res) => {
+    try {
+        const [rows] = await pool.query('SELECT * FROM vendors ORDER BY name ASC');
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/vendors', async (req, res) => {
+    try {
+        const { name, contact, category } = req.body;
+        const [result] = await pool.query('INSERT INTO vendors (name, contact, category) VALUES (?, ?, ?)', [name, contact, category]);
+        res.json({ id: result.insertId, success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/vendors/:id', async (req, res) => {
+    try {
+        const { name, contact, category } = req.body;
+        await pool.query('UPDATE vendors SET name = ?, contact = ?, category = ? WHERE id = ?', [name, contact, category, req.params.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/vendors/:id', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM vendors WHERE id = ?', [req.params.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/vendors/:id/transactions', async (req, res) => {
+    try {
+        const [rows] = await pool.query('SELECT * FROM vendor_transactions WHERE vendor_id = ? ORDER BY created_at DESC', [req.params.id]);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/inventory/purchase', async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        const { vendorId, materialId, qty, totalBill, paidAmount, description, date } = req.body;
+        const txDate = date ? new Date(date) : new Date();
+
+        // 1. Record Bill
+        await connection.query(
+            'INSERT INTO vendor_transactions (vendor_id, type, amount, description, material_id, qty, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [vendorId, 'BILL', totalBill, description || 'Purchase Bill', materialId || null, qty || 0, txDate]
+        );
+
+        // 2. Record Payment (if any)
+        if (Number(paidAmount) > 0) {
+            await connection.query(
+                'INSERT INTO vendor_transactions (vendor_id, type, amount, description, created_at) VALUES (?, ?, ?, ?, ?)',
+                [vendorId, 'PAYMENT', paidAmount, `Down Payment: ${description || ''}`, txDate]
+            );
+        }
+
+        // 3. Update Vendor Balance
+        const netDebt = Number(totalBill) - Number(paidAmount || 0);
+        await connection.query('UPDATE vendors SET balance = balance + ? WHERE id = ?', [netDebt, vendorId]);
+
+        // 4. Update Inventory Stock (Materials table)
+        if (materialId) {
+            await connection.query('UPDATE materials SET qty = qty + ? WHERE id = ?', [qty, materialId]);
+            
+            // Get material name for logs
+            const [mRows] = await connection.query('SELECT name FROM materials WHERE id = ?', [materialId]);
+            const mName = mRows.length > 0 ? mRows[0].name : 'Unknown Material';
+
+            // 5. Log Inventory
+            await connection.query(
+                'INSERT INTO inventory_logs (material_name, type, qty, reason, created_at) VALUES (?, ?, ?, ?, ?)',
+                [mName, 'IN', qty, `Purchased: ${description || ''}`, txDate]
+            );
+        }
+
+        await connection.commit();
+        res.json({ success: true });
+    } catch (err) {
+        await connection.rollback();
+        res.status(500).json({ error: err.message });
+    } finally {
+        connection.release();
+    }
+});
+
+app.post('/api/vendors/:id/transactions', async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        const { type, amount, description, date } = req.body;
+        
+        await connection.query(
+            'INSERT INTO vendor_transactions (vendor_id, type, amount, description, created_at) VALUES (?, ?, ?, ?, ?)',
+            [req.params.id, type, amount, description, date]
+        );
+
+        const diff = type === 'BILL' ? Number(amount) : -Number(amount);
+        await connection.query('UPDATE vendors SET balance = balance + ? WHERE id = ?', [diff, req.params.id]);
+
+        await connection.commit();
+        res.json({ success: true });
+    } catch (err) {
+        await connection.rollback();
+        res.status(500).json({ error: err.message });
+    } finally { connection.release(); }
+});
+
+app.delete('/api/vendors/:vendorId/transactions/:id', async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        const vendorId = req.params.vendorId;
+        const txId = req.params.id;
+
+        const [tx] = await connection.query('SELECT * FROM vendor_transactions WHERE id = ?', [txId]);
+        if (tx.length > 0) {
+            const oldRow = tx[0];
+            const diff = oldRow.type === 'BILL' ? -Number(oldRow.amount) : Number(oldRow.amount);
+            await connection.query('UPDATE vendors SET balance = balance + ? WHERE id = ?', [diff, vendorId]);
+        }
+
+        await connection.query('DELETE FROM vendor_transactions WHERE id = ?', [txId]);
+        await connection.commit();
+        res.json({ success: true });
+    } catch (err) {
+        await connection.rollback();
+        res.status(500).json({ error: err.message });
+    } finally { connection.release(); }
+});
+
+app.put('/api/vendors/:vendorId/transactions/:id', async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        const { amount, description, date, type } = req.body;
+        const txId = req.params.id;
+        const vendorId = req.params.vendorId;
+
+        const [oldTx] = await connection.query('SELECT * FROM vendor_transactions WHERE id = ?', [txId]);
+        if (oldTx.length > 0) {
+            const oldRow = oldTx[0];
+            const revDiff = oldRow.type === 'BILL' ? -Number(oldRow.amount) : Number(oldRow.amount);
+            await connection.query('UPDATE vendors SET balance = balance + ? WHERE id = ?', [revDiff, vendorId]);
+        }
+
+        const newDiff = type === 'BILL' ? Number(amount) : -Number(amount);
+        await connection.query('UPDATE vendors SET balance = balance + ? WHERE id = ?', [newDiff, vendorId]);
+
+        await connection.query(
+            'UPDATE vendor_transactions SET amount = ?, description = ?, created_at = ?, type = ? WHERE id = ?',
+            [amount, description, date, type, txId]
+        );
+
+        await connection.commit();
+        res.json({ success: true });
+    } catch (err) {
+        await connection.rollback();
+        res.status(500).json({ error: err.message });
+    } finally { connection.release(); }
 });
 
 // ============================================================
