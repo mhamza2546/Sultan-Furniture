@@ -261,7 +261,7 @@ function VendorLedger() {
           <div className="bg-white rounded-[24px] p-5 border-2 border-[#C5A059]/20 shadow-xl animate-in fade-in slide-in-from-top-4">
              <h4 className="font-extrabold text-slate-900 uppercase text-[10px] tracking-widest mb-4">Register Supplier</h4>
              <form onSubmit={handleCreateVendor} className="space-y-3">
-                <input required placeholder="Vendor Name" className={inputClass} value={newVendorName} onChange={e => setNewName(e.target.value)} />
+                <input required placeholder="Vendor Name" className={inputClass} value={newVendorName} onChange={e => setNewVendorName(e.target.value)} />
                 <input placeholder="Contact" className={inputClass} value={newVendorContact} onChange={e => setNewVendorContact(e.target.value)} />
                 <button type="submit" className="w-full h-11 bg-[#0b121e] text-white rounded-xl font-black text-[10px] uppercase">Create Account</button>
              </form>
