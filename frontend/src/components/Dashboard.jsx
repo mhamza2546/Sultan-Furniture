@@ -30,6 +30,8 @@ function Dashboard({ onGenerateReport }) {
   const [sales, setSales] = useState([]);
   const [materials, setMaterials] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [workers, setWorkers] = useState([]);
+  const [vendors, setVendors] = useState([]);
   const [monthSummary, setMonthSummary] = useState(null);
 
   const monthStart = useMemo(() => new Date(startOfMonthISO()), []);
@@ -43,11 +45,13 @@ function Dashboard({ onGenerateReport }) {
       setError('');
 
       try {
-        const [healthRes, salesRes, materialsRes, customersRes, reportRes] = await Promise.all([
+        const [healthRes, salesRes, materialsRes, customersRes, workersRes, vendorsRes, reportRes] = await Promise.all([
           fetch(`${API}/`),
           fetch(`${API}/api/reports/latest-sales`),
           fetch(`${API}/api/materials`),
           fetch(`${API}/api/customers`),
+          fetch(`${API}/api/workers`),
+          fetch(`${API}/api/vendors`),
           fetch(`${API}/api/reports/month?month=${currentMonthStr}`)
         ]);
 
@@ -55,16 +59,20 @@ function Dashboard({ onGenerateReport }) {
 
         setIsOnline(healthRes.ok);
 
-        const [salesJson, materialsJson, customersJson, reportJson] = await Promise.all([
+        const [salesJson, materialsJson, customersJson, workersJson, vendorsJson, reportJson] = await Promise.all([
           salesRes.json(),
           materialsRes.json(),
           customersRes.json(),
+          workersRes.json(),
+          vendorsRes.json(),
           reportRes.json()
         ]);
 
         setSales(Array.isArray(salesJson) ? salesJson : []);
         setMaterials(Array.isArray(materialsJson) ? materialsJson : []);
         setCustomers(Array.isArray(customersJson) ? customersJson : []);
+        setWorkers(Array.isArray(workersJson) ? workersJson : []);
+        setVendors(Array.isArray(vendorsJson) ? vendorsJson : []);
         setMonthSummary(reportJson?.summary || null);
       } catch (e) {
         if (cancelled) return;
@@ -83,26 +91,68 @@ function Dashboard({ onGenerateReport }) {
     };
   }, [currentMonthStr]);
 
-  const monthRevenue = useMemo(() => {
-    if (!monthSummary) return 0;
-    return (Number(monthSummary.totalSales) || 0) + (Number(monthSummary.totalLabourAdvance) || 0);
-  }, [monthSummary]);
+  const totalShowroomSales = useMemo(() => {
+    return customers.reduce((sum, c) => sum + (Number(c.total_sales_bill) || 0), 0);
+  }, [customers]);
 
-  const monthPayoutTotal = useMemo(() => {
-    if (!monthSummary) return 0;
-    return Number(monthSummary.totalLabourPaid) || 0;
-  }, [monthSummary]);
+  const totalShowroomBalance = useMemo(() => {
+    return customers.reduce((sum, c) => sum + (Number(c.balance) || 0), 0);
+  }, [customers]);
 
-  const lowStockCount = useMemo(() => {
-    return materials.filter(m => Number(m.qty) < 10).length;
-  }, [materials]);
+  const totalShowroomReceived = useMemo(() => {
+    return customers.reduce((sum, c) => sum + (Number(c.total_received) || 0), 0);
+  }, [customers]);
 
   const stats = useMemo(() => ([
-    { label: 'Monthly Revenue', value: `₨ ${Number(monthRevenue).toLocaleString('en-PK')}`, change: 'This Month', isUp: true, icon: TrendingUpIcon, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    { label: 'Total Showroom Sales', value: `₨ ${Number(totalShowroomSales).toLocaleString('en-PK')}`, change: 'All Time', isUp: true, icon: TrendingUpIcon, color: 'text-emerald-600', bg: 'bg-emerald-50' },
     { label: 'Active Showrooms', value: String(customers.length).padStart(2, '0'), change: 'Partners', isUp: true, icon: StoreIcon, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Labour Payouts', value: `₨ ${Number(monthPayoutTotal).toLocaleString('en-PK')}`, change: 'This Month', isUp: true, icon: UsersIcon, color: 'text-orange-600', bg: 'bg-orange-50' },
-    { label: 'Low Stock Items', value: String(lowStockCount).padStart(2, '0'), change: lowStockCount > 0 ? 'Action Required' : 'All Good', isUp: lowStockCount === 0, icon: AlertIcon, color: 'text-red-600', bg: 'bg-red-50' },
-  ]), [monthRevenue, customers.length, monthPayoutTotal, lowStockCount]);
+    { label: 'Net Pending Balance', value: `₨ ${Math.abs(Number(totalShowroomBalance)).toLocaleString('en-PK')}`, change: 'Remaining', isUp: false, icon: AlertIcon, color: 'text-orange-600', bg: 'bg-orange-50' },
+    { label: 'Total Received Amount', value: `₨ ${Number(totalShowroomReceived).toLocaleString('en-PK')}`, change: 'Recovered', isUp: true, icon: ActivityIcon, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+  ]), [totalShowroomSales, customers.length, totalShowroomBalance, totalShowroomReceived]);
+
+  const totalLabourEarned = useMemo(() => {
+    return workers.reduce((sum, w) => sum + (Number(w.total_earned) || 0), 0);
+  }, [workers]);
+
+  const totalLabourAdvance = useMemo(() => {
+    return workers.reduce((sum, w) => sum + (Number(w.total_advance) || 0), 0);
+  }, [workers]);
+
+  const totalLabourBalance = useMemo(() => {
+    return workers.reduce((sum, w) => sum + (Number(w.balance) || 0), 0);
+  }, [workers]);
+
+  const labourStats = useMemo(() => ([
+    { label: 'Total Labour Earned', value: `₨ ${Number(totalLabourEarned).toLocaleString('en-PK')}`, change: 'All Time', isUp: true, icon: ActivityIcon, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+    { label: 'Total Labours', value: String(workers.length).padStart(2, '0'), change: 'Active', isUp: true, icon: UsersIcon, color: 'text-blue-600', bg: 'bg-blue-50' },
+    { label: 'Net Labour Balance', value: `₨ ${Math.abs(Number(totalLabourBalance)).toLocaleString('en-PK')}`, change: 'Remaining', isUp: false, icon: AlertIcon, color: 'text-orange-600', bg: 'bg-orange-50' },
+    { label: 'Total Advance Given', value: `₨ ${Number(totalLabourAdvance).toLocaleString('en-PK')}`, change: 'Paid', isUp: true, icon: SaleIcon, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+  ]), [totalLabourEarned, workers.length, totalLabourAdvance, totalLabourBalance]);
+
+  const totalVendorPurchase = useMemo(() => {
+    return vendors.reduce((sum, v) => sum + (Number(v.total_purchase) || 0), 0);
+  }, [vendors]);
+
+  const totalVendorPaid = useMemo(() => {
+    return vendors.reduce((sum, v) => sum + (Number(v.total_paid) || 0), 0);
+  }, [vendors]);
+
+  const totalVendorBalance = useMemo(() => {
+    return vendors.reduce((sum, v) => sum + (Number(v.balance) || 0), 0);
+  }, [vendors]);
+
+  const supplierStats = useMemo(() => ([
+    { label: 'Total Purchase', value: `₨ ${Number(totalVendorPurchase).toLocaleString('en-PK')}`, change: 'All Time', isUp: true, icon: SaleIcon, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+    { label: 'Total Suppliers', value: String(vendors.length).padStart(2, '0'), change: 'Active', isUp: true, icon: UsersIcon, color: 'text-blue-600', bg: 'bg-blue-50' },
+    { label: 'Net Pending Balance', value: `₨ ${Math.abs(Number(totalVendorBalance)).toLocaleString('en-PK')}`, change: 'Remaining', isUp: false, icon: AlertIcon, color: 'text-orange-600', bg: 'bg-orange-50' },
+    { label: 'Paid Against Bill', value: `₨ ${Number(totalVendorPaid).toLocaleString('en-PK')}`, change: 'Cleared', isUp: true, icon: ActivityIcon, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+  ]), [totalVendorPurchase, vendors.length, totalVendorBalance, totalVendorPaid]);
+
+  const otherStats = useMemo(() => ([
+    { label: 'Total Receivables & Advances', value: `₨ ${Number(totalShowroomBalance + totalLabourAdvance).toLocaleString('en-PK')}`, change: 'Market Assets', isUp: true, icon: TrendingUpIcon, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+    { label: 'Total Market Payables', value: `₨ ${Math.abs(Number(totalLabourBalance + totalVendorBalance)).toLocaleString('en-PK')}`, change: 'Liabilities', isUp: false, icon: AlertIcon, color: 'text-red-600', bg: 'bg-red-50' },
+    { label: 'Sales + Labour Advances', value: `₨ ${Number(totalShowroomSales + totalLabourAdvance).toLocaleString('en-PK')}`, change: 'Operations', isUp: true, icon: ActivityIcon, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+  ]), [totalShowroomBalance, totalLabourAdvance, totalLabourBalance, totalVendorBalance, totalShowroomSales]);
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700">
@@ -142,26 +192,103 @@ function Dashboard({ onGenerateReport }) {
         </div>
       )}
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, i) => (
-          <div key={i} className="stat-card group">
-            <div className="flex justify-between items-start mb-4">
-              <div className={`${stat.bg} ${stat.color} p-3 rounded-2xl transition-transform group-hover:scale-110`}>
-                <stat.icon className="w-5 h-5 sm:w-6 sm:h-6" />
+      {/* Stats Grids */}
+      <div className="space-y-8">
+        <div>
+          <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center justify-center gap-2"><StoreIcon className="w-4 h-4 text-[#C5A059]" /> Showroom Details</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {stats.map((stat, i) => (
+              <div key={i} className="stat-card group">
+                <div className="flex justify-between items-start mb-4">
+                  <div className={`${stat.bg} ${stat.color} p-3 rounded-2xl transition-transform group-hover:scale-110`}>
+                    <stat.icon className="w-5 h-5 sm:w-6 sm:h-6" />
+                  </div>
+                  <div className={`flex items-center gap-1 text-[10px] sm:text-xs font-bold ${stat.isUp ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {stat.isUp ? <UpIcon className="w-3 h-3" /> : <DownIcon className="w-3 h-3" />}
+                    {stat.change}
+                  </div>
+                </div>
+                <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">{stat.label}</p>
+                <h3 className="text-xl sm:text-2xl font-bold text-slate-900 mt-1 flex items-center gap-2 truncate" title={stat.value}>
+                  {loading ? <LoaderIcon className="w-4 h-4 sm:w-5 sm:h-5 animate-spin text-slate-400" /> : null}
+                  {stat.value}
+                </h3>
               </div>
-              <div className={`flex items-center gap-1 text-[10px] sm:text-xs font-bold ${stat.isUp ? 'text-emerald-600' : 'text-red-500'}`}>
-                {stat.isUp ? <UpIcon className="w-3 h-3" /> : <DownIcon className="w-3 h-3" />}
-                {stat.change}
-              </div>
-            </div>
-            <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">{stat.label}</p>
-            <h3 className="text-xl sm:text-2xl font-bold text-slate-900 mt-1 flex items-center gap-2 truncate" title={stat.value}>
-              {loading ? <LoaderIcon className="w-4 h-4 sm:w-5 sm:h-5 animate-spin text-slate-400" /> : null}
-              {stat.value}
-            </h3>
+            ))}
           </div>
-        ))}
+        </div>
+
+        <div>
+          <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center justify-center gap-2"><UsersIcon className="w-4 h-4 text-[#C5A059]" /> Labour Details</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {labourStats.map((stat, i) => (
+              <div key={i} className="stat-card group">
+                <div className="flex justify-between items-start mb-4">
+                  <div className={`${stat.bg} ${stat.color} p-3 rounded-2xl transition-transform group-hover:scale-110`}>
+                    <stat.icon className="w-5 h-5 sm:w-6 sm:h-6" />
+                  </div>
+                  <div className={`flex items-center gap-1 text-[10px] sm:text-xs font-bold ${stat.isUp ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {stat.isUp ? <UpIcon className="w-3 h-3" /> : <DownIcon className="w-3 h-3" />}
+                    {stat.change}
+                  </div>
+                </div>
+                <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">{stat.label}</p>
+                <h3 className="text-xl sm:text-2xl font-bold text-slate-900 mt-1 flex items-center gap-2 truncate" title={stat.value}>
+                  {loading ? <LoaderIcon className="w-4 h-4 sm:w-5 sm:h-5 animate-spin text-slate-400" /> : null}
+                  {stat.value}
+                </h3>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center justify-center gap-2"><Package className="w-4 h-4 text-[#C5A059]" /> Supplier Details</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {supplierStats.map((stat, i) => (
+              <div key={i} className="stat-card group">
+                <div className="flex justify-between items-start mb-4">
+                  <div className={`${stat.bg} ${stat.color} p-3 rounded-2xl transition-transform group-hover:scale-110`}>
+                    <stat.icon className="w-5 h-5 sm:w-6 sm:h-6" />
+                  </div>
+                  <div className={`flex items-center gap-1 text-[10px] sm:text-xs font-bold ${stat.isUp ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {stat.isUp ? <UpIcon className="w-3 h-3" /> : <DownIcon className="w-3 h-3" />}
+                    {stat.change}
+                  </div>
+                </div>
+                <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">{stat.label}</p>
+                <h3 className="text-xl sm:text-2xl font-bold text-slate-900 mt-1 flex items-center gap-2 truncate" title={stat.value}>
+                  {loading ? <LoaderIcon className="w-4 h-4 sm:w-5 sm:h-5 animate-spin text-slate-400" /> : null}
+                  {stat.value}
+                </h3>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center justify-center gap-2"><ActivityIcon className="w-4 h-4 text-[#C5A059]" /> Other Details</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {otherStats.map((stat, i) => (
+              <div key={i} className="stat-card group">
+                <div className="flex justify-between items-start mb-4">
+                  <div className={`${stat.bg} ${stat.color} p-3 rounded-2xl transition-transform group-hover:scale-110`}>
+                    <stat.icon className="w-5 h-5 sm:w-6 sm:h-6" />
+                  </div>
+                  <div className={`flex items-center gap-1 text-[10px] sm:text-xs font-bold ${stat.isUp ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {stat.isUp ? <UpIcon className="w-3 h-3" /> : <DownIcon className="w-3 h-3" />}
+                    {stat.change}
+                  </div>
+                </div>
+                <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">{stat.label}</p>
+                <h3 className="text-xl sm:text-2xl font-bold text-slate-900 mt-1 flex items-center gap-2 truncate" title={stat.value}>
+                  {loading ? <LoaderIcon className="w-4 h-4 sm:w-5 sm:h-5 animate-spin text-slate-400" /> : null}
+                  {stat.value}
+                </h3>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Main Content Sections */}

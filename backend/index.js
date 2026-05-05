@@ -360,7 +360,12 @@ app.post('/api/payouts', async (req, res) => {
 
 app.get('/api/workers', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM workers ORDER BY created_at DESC');
+    const [rows] = await pool.query(`
+      SELECT w.*, 
+        (SELECT SUM(amount) FROM worker_transactions WHERE worker_id = w.id AND type = 'EARNING') as total_earned,
+        (SELECT SUM(amount) FROM worker_transactions WHERE worker_id = w.id AND type = 'PAYMENT') as total_advance
+      FROM workers w ORDER BY w.created_at DESC
+    `);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -523,7 +528,12 @@ app.delete('/api/workers/:id/transactions/:txId', async (req, res) => {
 
 app.get('/api/customers', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM customers ORDER BY created_at DESC');
+    const [rows] = await pool.query(`
+      SELECT c.*, 
+        (SELECT SUM(amount) FROM customer_transactions WHERE customer_id = c.id AND type = 'PURCHASE') as total_sales_bill,
+        (SELECT SUM(amount) FROM customer_transactions WHERE customer_id = c.id AND type = 'PAYMENT') as total_received
+      FROM customers c ORDER BY c.created_at DESC
+    `);
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1026,7 +1036,12 @@ app.delete('/api/jobs/:id', async (req, res) => {
 
 app.get('/api/vendors', async (req, res) => {
     try {
-        const [rows] = await pool.query('SELECT * FROM vendors ORDER BY name ASC');
+        const [rows] = await pool.query(`
+          SELECT v.*, 
+            (SELECT SUM(amount) FROM vendor_transactions WHERE vendor_id = v.id AND type = 'BILL') as total_purchase,
+            (SELECT SUM(amount) FROM vendor_transactions WHERE vendor_id = v.id AND type = 'PAYMENT') as total_paid
+          FROM vendors v ORDER BY v.name ASC
+        `);
         res.json(rows);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
