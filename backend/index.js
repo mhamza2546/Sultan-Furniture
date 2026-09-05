@@ -807,13 +807,25 @@ app.get('/api/reports', async (req, res) => {
     const totalVendorBills = vendorPurchases.filter(v => v.type === 'BILL').reduce((sum, v) => sum + parseFloat(v.amount || 0), 0);
     const totalVendorPaid = vendorPurchases.filter(v => v.type === 'PAYMENT').reduce((sum, v) => sum + parseFloat(v.amount || 0), 0);
 
+    // Roznamcha (Daily Expense Journal)
+    const [roznamchaEntries] = await pool.query(
+      `SELECT rt.*, ra.name as account_name
+       FROM roznamcha_transactions rt
+       JOIN roznamcha_accounts ra ON rt.account_id = ra.id
+       WHERE rt.tx_date = ?
+       ORDER BY rt.created_at DESC`,
+      [date]
+    );
+    const totalRoznamchaExpense = roznamchaEntries.filter(r => r.type === 'EXPENSE').reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
+
     res.json({
       date,
-      summary: { totalLabourEarned, totalLabourPaid, totalSales, totalMaterialIn, totalMaterialOut, totalVendorBills, totalVendorPaid },
+      summary: { totalLabourEarned, totalLabourPaid, totalSales, totalMaterialIn, totalMaterialOut, totalVendorBills, totalVendorPaid, totalRoznamchaExpense },
       inventoryLogs,
       labourPayouts,
       salesRecords,
       vendorPurchases,
+      roznamchaEntries,
       jobsCreated: [] // Removed production jobs
     });
   } catch (err) {
@@ -898,6 +910,17 @@ app.get('/api/reports/month', async (req, res) => {
     const totalVendorBills = vendorPurchases.filter(v => v.type === 'BILL').reduce((sum, v) => sum + parseFloat(v.amount || 0), 0);
     const totalVendorPaid = vendorPurchases.filter(v => v.type === 'PAYMENT').reduce((sum, v) => sum + parseFloat(v.amount || 0), 0);
 
+    // Roznamcha for month
+    const [roznamchaEntries] = await pool.query(
+      `SELECT rt.*, ra.name as account_name
+       FROM roznamcha_transactions rt
+       JOIN roznamcha_accounts ra ON rt.account_id = ra.id
+       WHERE rt.tx_date >= ? AND rt.tx_date < DATE_ADD(?, INTERVAL 1 MONTH)
+       ORDER BY rt.tx_date DESC, rt.created_at DESC`,
+      [start, start]
+    );
+    const totalRoznamchaExpense = roznamchaEntries.filter(r => r.type === 'EXPENSE').reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
+
     res.json({
       month,
       summary: {
@@ -909,6 +932,7 @@ app.get('/api/reports/month', async (req, res) => {
         totalMaterialOut,
         totalVendorBills,
         totalVendorPaid,
+        totalRoznamchaExpense,
         jobsCreated: 0,
         jobsForwarded: 0,
         jobsFinished: 0
@@ -917,12 +941,107 @@ app.get('/api/reports/month', async (req, res) => {
       labourPayouts,
       salesRecords,
       vendorPurchases,
+      roznamchaEntries,
       jobsCreated: [],
       jobsForwarded: []
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ============================================================
+// ROZNAMCHA — Daily Expense Journal
+// ============================================================
+
+// Get all accounts
+app.get('/api/roznamcha/accounts', async (req, res) => {
+  try {
+    const [accounts] = await pool.query('SELECT * FROM roznamcha_accounts ORDER BY name ASC');
+    res.json(accounts);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Create account
+app.post('/api/roznamcha/accounts', async (req, res) => {
+  try {
+    const { name, description } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Account name is required' });
+    const [result] = await pool.query(
+      'INSERT INTO roznamcha_accounts (name, description) VALUES (?, ?)',
+      [name.trim(), description || '']
+    );
+    res.json({ success: true, id: result.insertId });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Update account
+app.put('/api/roznamcha/accounts/:id', async (req, res) => {
+  try {
+    const { name, description } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Account name is required' });
+    await pool.query(
+      'UPDATE roznamcha_accounts SET name = ?, description = ? WHERE id = ?',
+      [name.trim(), description || '', req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Delete account
+app.delete('/api/roznamcha/accounts/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM roznamcha_accounts WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Get transactions for an account
+app.get('/api/roznamcha/accounts/:id/transactions', async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      'SELECT * FROM roznamcha_transactions WHERE account_id = ? ORDER BY tx_date DESC, created_at DESC',
+      [req.params.id]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Add transaction
+app.post('/api/roznamcha/accounts/:id/transactions', async (req, res) => {
+  try {
+    const { type, amount, description, tx_date } = req.body;
+    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0)
+      return res.status(400).json({ error: 'Valid amount is required' });
+    if (!tx_date) return res.status(400).json({ error: 'Date is required' });
+    const [result] = await pool.query(
+      'INSERT INTO roznamcha_transactions (account_id, type, amount, description, tx_date) VALUES (?, ?, ?, ?, ?)',
+      [req.params.id, type || 'EXPENSE', Number(amount), description || '', tx_date]
+    );
+    res.json({ success: true, id: result.insertId });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Update transaction
+app.put('/api/roznamcha/accounts/:accountId/transactions/:txId', async (req, res) => {
+  try {
+    const { type, amount, description, tx_date } = req.body;
+    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0)
+      return res.status(400).json({ error: 'Valid amount is required' });
+    await pool.query(
+      'UPDATE roznamcha_transactions SET type = ?, amount = ?, description = ?, tx_date = ? WHERE id = ? AND account_id = ?',
+      [type || 'EXPENSE', Number(amount), description || '', tx_date, req.params.txId, req.params.accountId]
+    );
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Delete transaction
+app.delete('/api/roznamcha/accounts/:accountId/transactions/:txId', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM roznamcha_transactions WHERE id = ? AND account_id = ?', [req.params.txId, req.params.accountId]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ============================================================
@@ -1200,6 +1319,52 @@ app.put('/api/vendors/:vendorId/transactions/:id', async (req, res) => {
         await connection.rollback();
         res.status(500).json({ error: err.message });
     } finally { connection.release(); }
+});
+
+// ============================================================
+// ITEMS CATALOG
+// ============================================================
+
+app.get('/api/items', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM items ORDER BY category ASC, name ASC');
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/items', async (req, res) => {
+  try {
+    const { name, price, unit, category, item_type } = req.body;
+    if (!name || name.trim() === '') return res.status(400).json({ error: 'Item name is required' });
+    if (price === undefined || price === null || isNaN(Number(price)) || Number(price) < 0)
+      return res.status(400).json({ error: 'A valid price is required (0 or above)' });
+    const [result] = await pool.query(
+      'INSERT INTO items (name, price, unit, category, item_type) VALUES (?, ?, ?, ?, ?)',
+      [name.trim(), Number(price), unit || 'Piece', category || 'General', item_type || 'BOTH']
+    );
+    res.json({ success: true, id: result.insertId });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/items/:id', async (req, res) => {
+  try {
+    const { name, price, unit, category, item_type } = req.body;
+    if (!name || name.trim() === '') return res.status(400).json({ error: 'Item name is required' });
+    if (price === undefined || price === null || isNaN(Number(price)) || Number(price) < 0)
+      return res.status(400).json({ error: 'A valid price is required (0 or above)' });
+    await pool.query(
+      'UPDATE items SET name = ?, price = ?, unit = ?, category = ?, item_type = ? WHERE id = ?',
+      [name.trim(), Number(price), unit || 'Piece', category || 'General', item_type || 'BOTH', req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/items/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM items WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ============================================================

@@ -2,6 +2,23 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Loader2, Plus, Users, Wallet, History, Search, Package, Trash2, Pencil, Check, X, Calendar, UserCheck, ShieldCheck, UserPlus, Phone, Tag, Briefcase } from 'lucide-react';
 import { API } from '../lib/api';
 
+
+function parseItemAndQty(text) {
+  if (!text) return { desc: '', qty: null };
+  const raw = String(text).trim();
+  const endMatch = raw.match(/^(.*?)(?:\s*(?:x|\*|-)\s*(\d+(?:\.\d+)?))$/i);
+  if (endMatch && endMatch[1].trim()) {
+    const q = parseFloat(endMatch[2]);
+    return { desc: endMatch[1].trim(), qty: Number.isInteger(q) ? q : q.toFixed(1) };
+  }
+  const startMatch = raw.match(/^(\d+(?:\.\d+)?)\s*(?:x\s*|\s*pcs\s*|\s*pc\s*)?([a-zA-Z\u0600-\u06FF].*)$/i);
+  if (startMatch) {
+    const q = parseFloat(startMatch[1]);
+    return { desc: startMatch[2].trim(), qty: Number.isInteger(q) ? q : q.toFixed(1) };
+  }
+  return { desc: raw, qty: null };
+}
+
 function WorkerLedger() {
   const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -23,10 +40,19 @@ function WorkerLedger() {
   const [txDate, setTxDate] = useState(new Date().toISOString().split('T')[0]);
   const [txSaving, setTxSaving] = useState(false);
 
+  // Item Selector States
+  const [catalogItems, setCatalogItems] = useState([]);
+  const [selectedItem, setSelectedItem] = useState('');
+  const [itemQty, setItemQty] = useState('');
+  const [useItemPricing, setUseItemPricing] = useState(false);
+
   const [editingTx, setEditingTx] = useState(null);
   const [editingWorker, setEditingWorker] = useState(null);
   const [editName, setEditName] = useState('');
   const [editJob, setEditJob] = useState('');
+
+  // Custom Delete Modal
+  const [deleteModal, setDeleteModal] = useState(null); // { type: 'worker'|'tx', data, ids }
 
   const fetchWorkers = async (autoSelectId = null) => {
     try {
@@ -57,6 +83,28 @@ function WorkerLedger() {
   };
 
   useEffect(() => { fetchWorkers(); }, []);
+
+  // Fetch catalog items
+  useEffect(() => {
+    fetch(`${API}/api/items`)
+      .then(r => r.json())
+      .then(d => {
+        const arr = Array.isArray(d) ? d : [];
+        setCatalogItems(arr.filter(i => i.item_type === 'LABOUR' || i.item_type === 'BOTH' || !i.item_type));
+      })
+      .catch(() => {});
+  }, []);
+
+  // Auto-calculate amount when item or qty changes
+  useEffect(() => {
+    if (!useItemPricing || !selectedItem || itemQty === '') return;
+    const item = catalogItems.find(i => String(i.id) === String(selectedItem));
+    if (item && Number(itemQty) > 0) {
+      const calc = (Number(item.price) * Number(itemQty)).toFixed(2);
+      setTxAmount(calc);
+      setTxDesc(`${item.name} x${itemQty}`);
+    }
+  }, [selectedItem, itemQty, useItemPricing, catalogItems]);
 
   const handleCreateWorker = async (e) => {
     e.preventDefault();
@@ -91,14 +139,28 @@ function WorkerLedger() {
   };
 
   const handleDeleteWorker = async (id) => {
-    if (!window.confirm('Delete worker profile permanently?')) return;
+    setDeleteModal({ type: 'worker', id, label: workers.find(w => w.id === id)?.name || 'this worker' });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteModal) return;
     try {
-      const res = await fetch(`${API}/api/workers/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        if (selectedWorker?.id === id) setSelectedWorker(null);
-        fetchWorkers();
+      if (deleteModal.type === 'worker') {
+        const res = await fetch(`${API}/api/workers/${deleteModal.id}`, { method: 'DELETE' });
+        if (res.ok) {
+          if (selectedWorker?.id === deleteModal.id) setSelectedWorker(null);
+          fetchWorkers();
+        }
+      } else if (deleteModal.type === 'tx') {
+        const ids = deleteModal.ids || [deleteModal.id];
+        for (const id of ids) {
+          await fetch(`${API}/api/workers/${selectedWorker.id}/transactions/${id}`, { method: 'DELETE' });
+        }
+        fetchTransactions(selectedWorker.id);
+        fetchWorkers(selectedWorker.id);
       }
     } catch (e) { console.error(e); }
+    finally { setDeleteModal(null); }
   };
 
   const handlePostTransaction = async (e) => {
@@ -173,6 +235,7 @@ function WorkerLedger() {
       }
 
       setTxAmount(''); setTxPaid(''); setTxDesc(''); setEditingTx(null);
+      setSelectedItem(''); setItemQty(''); setUseItemPricing(false);
       fetchTransactions(selectedWorker.id);
       fetchWorkers(selectedWorker.id);
     } catch (e) { alert(e.message); }
@@ -393,9 +456,79 @@ function WorkerLedger() {
                  {editingTx && (
                     <div className="bg-blue-50/50 p-5 rounded-2xl border border-blue-100 flex items-center justify-between animate-in slide-in-from-top-2">
                        <p className="text-[11px] font-black text-blue-700 uppercase tracking-widest flex items-center gap-2"><Pencil className="w-4 h-4 text-blue-500 animate-pulse"/> Editing Entry...</p>
-                       <X className="w-6 h-6 text-blue-400 cursor-pointer" onClick={() => { setEditingTx(null); setTxAmount(''); setTxPaid(''); setTxDesc(''); }} />
+                       <X className="w-6 h-6 text-blue-400 cursor-pointer" onClick={() => { setEditingTx(null); setTxAmount(''); setTxPaid(''); setTxDesc(''); setSelectedItem(''); setItemQty(''); setUseItemPricing(false); }} />
                     </div>
                  )}
+
+                 {/* ITEM PRICING TOGGLE */}
+                 {!editingTx && catalogItems.length > 0 && (
+                   <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
+                     <div className="flex items-center justify-between mb-3">
+                       <label className="flex items-center gap-2 cursor-pointer select-none" htmlFor="workerItemToggle">
+                         <div
+                           id="workerItemToggle"
+                           onClick={() => { setUseItemPricing(v => !v); setSelectedItem(''); setItemQty(''); }}
+                           className={`w-11 h-6 rounded-full transition-all relative cursor-pointer ${
+                             useItemPricing ? 'bg-[#C5A059]' : 'bg-slate-200'
+                           }`}
+                         >
+                           <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${
+                             useItemPricing ? 'left-6' : 'left-1'
+                           }`} />
+                         </div>
+                         <span className="text-[11px] font-black text-slate-600 uppercase tracking-widest">
+                           Use Item Pricing
+                         </span>
+                       </label>
+                       {useItemPricing && (
+                         <span className="text-[10px] text-[#C5A059] font-black uppercase">Auto-Calculate</span>
+                       )}
+                     </div>
+                     {useItemPricing && (
+                       <div className="grid grid-cols-2 gap-3 animate-in slide-in-from-top-2 duration-200">
+                         <div>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Select Item</label>
+                           <select
+                             className={inputClass}
+                             value={selectedItem}
+                             onChange={e => setSelectedItem(e.target.value)}
+                           >
+                             <option value="">-- Choose Item --</option>
+                             {catalogItems.map(item => (
+                               <option key={item.id} value={item.id}>
+                                 {item.name} — Rs {Number(item.price).toLocaleString()} / {item.unit}
+                               </option>
+                             ))}
+                           </select>
+                         </div>
+                         <div>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Quantity</label>
+                           <input
+                             type="number"
+                             min="0"
+                             step="0.01"
+                             placeholder="0"
+                             className={inputClass}
+                             value={itemQty}
+                             onChange={e => setItemQty(e.target.value)}
+                           />
+                         </div>
+                         {selectedItem && itemQty && (
+                           <div className="col-span-2 flex items-center gap-2 px-4 py-3 bg-[#C5A059]/10 border border-[#C5A059]/20 rounded-xl">
+                             <Tag className="w-4 h-4 text-[#C5A059] shrink-0" />
+                             <span className="text-sm font-black text-slate-700">
+                               {catalogItems.find(i => String(i.id) === String(selectedItem))?.name} &times; {itemQty} =
+                             </span>
+                             <span className="ml-auto font-black text-[#C5A059] text-base">
+                               Rs {(Number(catalogItems.find(i => String(i.id) === String(selectedItem))?.price || 0) * Number(itemQty || 0)).toLocaleString()}
+                             </span>
+                           </div>
+                         )}
+                       </div>
+                     )}
+                   </div>
+                 )}
+
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                     <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Detail / Task</label>
@@ -407,13 +540,22 @@ function WorkerLedger() {
                     </div>
                  </div>
                  
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                      <div>
                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Prev Balance</label>
                          <div className={`flex items-center ${inputClass} bg-slate-50 cursor-not-allowed select-none ${prevBal < 0 ? 'text-red-500' : 'text-emerald-500'}`}>
                              {prevBal < 0 ? `Advance: ₨ ${Math.abs(prevBal).toLocaleString()}` : `Payable: ₨ ${Math.abs(prevBal).toLocaleString()}`}
                          </div>
                      </div>
+                     <div>
+                         <label className="block text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1 ml-1">New Total Balance</label>
+                         <div className={`flex items-center ${inputClass} bg-slate-50 cursor-not-allowed select-none ${newBal < 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                             {newBal < 0 ? `Advance: ₨ ${Math.abs(newBal).toLocaleString()}` : `Payable: ₨ ${Math.abs(newBal).toLocaleString()}`}
+                         </div>
+                     </div>
+                 </div>
+
+                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                      <div>
                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Work Amount (₨)</label>
                          <input type="number" min="0" placeholder="0" className={inputClass} value={txAmount} onChange={e => setTxAmount(e.target.value)} />
@@ -423,9 +565,9 @@ function WorkerLedger() {
                          <input type="number" min="0" placeholder="0" className={inputClass} value={txPaid} onChange={e => setTxPaid(e.target.value)} />
                      </div>
                      <div>
-                         <label className="block text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1 ml-1">New Balance</label>
-                         <div className={`flex items-center ${inputClass} bg-slate-50 cursor-not-allowed select-none ${newBal < 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-                             {newBal < 0 ? `Advance: ₨ ${Math.abs(newBal).toLocaleString()}` : `Payable: ₨ ${Math.abs(newBal).toLocaleString()}`}
+                         <label className="block text-[10px] font-black text-red-500 uppercase tracking-widest mb-1 ml-1">Remaining</label>
+                         <div className={`flex items-center ${inputClass} bg-slate-50 text-slate-500 cursor-not-allowed select-none`}>
+                             {Math.max(0, (Number(txAmount) || 0) - (Number(txPaid) || 0)).toLocaleString()}
                          </div>
                      </div>
                  </div>
@@ -445,68 +587,138 @@ function WorkerLedger() {
                   <span className="px-3 py-1 bg-slate-100 rounded-lg text-[10px] font-black text-slate-400 uppercase tracking-widest">{ledgerData.length} Entries</span>
                </div>
                <div className="overflow-x-auto">
-                 <table className="w-full text-left min-w-[800px]">
-                   <thead>
-                     <tr className="bg-slate-50/50">
-                       <th className="pl-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</th>
-                       <th className="px-5 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Description</th>
-                       <th className="px-5 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Work Amount (+)</th>
-                       <th className="px-5 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Paid (-)</th>
-                       <th className="px-5 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Advance (-)</th>
-                       <th className="px-5 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Net Balance</th>
-                       <th className="pr-8 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Actions</th>
-                     </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {txLoading ? (
-                        <tr><td colSpan="6" className="py-20 text-center"><Loader2 className="w-8 h-8 animate-spin text-[#811d1d] mx-auto" /></td></tr>
-                      ) : ledgerData.length === 0 ? (
-                        <tr><td colSpan="6" className="py-24 text-center font-bold text-slate-300 uppercase text-[10px] tracking-widest">No History</td></tr>
-                      ) : (
-                        ledgerData.map(tx => (
-                          <tr key={tx.id} className="group hover:bg-slate-50 transition-all">
-                             <td className="pl-8 py-6 text-xs font-black text-slate-900">{new Date(tx.date).toLocaleDateString('en-GB')}</td>
-                             <td className="px-5 py-6 font-bold text-slate-600 text-[13px]">{tx.desc}</td>
-                             <td className="px-5 py-6 text-right font-black tabular-nums text-xs text-emerald-600">
-                                {Number(tx.earning) > 0 ? `₨ ${Number(tx.earning).toLocaleString()}` : <span className="opacity-10">—</span>}
-                             </td>
-                             <td className="px-5 py-6 text-right font-black tabular-nums text-xs text-blue-500">
-                                {Number(tx.paid) > 0 ? `₨ ${Number(tx.paid).toLocaleString()}` : <span className="opacity-10">—</span>}
-                             </td>
-                             <td className="px-5 py-6 text-right font-black tabular-nums text-xs text-red-500">
-                                {Number(tx.advance) > 0 ? `₨ ${Number(tx.advance).toLocaleString()}` : <span className="opacity-10">—</span>}
-                             </td>
-                             <td className="px-5 py-6 text-right font-black tabular-nums text-xs whitespace-nowrap bg-slate-50/20">
-                                <span className={tx.balAfter < 0 ? 'text-red-600' : 'text-emerald-600'}>{tx.balAfter < 0 ? '-' : ''}₨ {Math.abs(tx.balAfter).toLocaleString()}</span>
-                             </td>
-                             <td className="pr-8 py-6 text-right">
-                                <div className="flex items-center justify-center gap-2">
-                                   <button onClick={() => startEditTx(tx)} className="p-3 bg-blue-50 text-blue-500 rounded-xl hover:bg-blue-600 hover:text-white transition-all border border-blue-50 shadow-sm"><Pencil className="w-3.5 h-3.5"/></button>
-                                   <button onClick={async () => {
-                                       if (!confirm('Delete item?')) return;
-                                       const ids = tx.isMerged ? [tx.pId, tx.rId] : [tx.id];
-                                       for (const id of ids) await fetch(`${API}/api/workers/${selectedWorker.id}/transactions/${id}`, { method: 'DELETE' });
-                                       fetchTransactions(selectedWorker.id); fetchWorkers(selectedWorker.id);
-                                   }} className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-600 hover:text-white transition-all border border-red-50 shadow-sm"><Trash2 className="w-3.5 h-3.5"/></button>
-                                </div>
-                             </td>
-                          </tr>
-                        ))
-                      )}
-                      {!txLoading && ledgerData.length > 0 && (
-                        <tr className="bg-slate-900 text-white font-black border-t-2 border-[#C5A059]">
-                           <td colSpan="2" className="pl-8 py-7 text-[10px] uppercase tracking-widest text-[#C5A059]">Total Statement Audit</td>
-                           <td className="px-5 py-7 text-right tabular-nums text-sm text-emerald-400">₨ {totals.earned.toLocaleString()}</td>
-                           <td className="px-5 py-7 text-right tabular-nums text-sm text-blue-400">₨ {totals.paid.toLocaleString()}</td>
-                           <td className="px-5 py-7 text-right tabular-nums text-sm text-red-400">₨ {totals.advance.toLocaleString()}</td>
-                           <td className="px-5 py-7 text-right tabular-nums text-sm text-[#C5A059]">
-                               {totals.balance < 0 ? '-' : ''}₨ {Math.abs(totals.balance).toLocaleString()}
-                           </td>
-                           <td className="pr-8"></td>
-                        </tr>
-                      )}
-                    </tbody>
-                 </table>
+                  <table className="w-full table-fixed" style={{ minWidth: '1360px' }}>
+                    <thead>
+                      <tr className="bg-slate-50/50 border-b border-slate-100">
+                        <th style={{ width: '130px' }} className="pl-8 pr-4 py-5">
+                           <div className="flex justify-start text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Date</div>
+                        </th>
+                        <th style={{ width: '180px' }} className="px-4 py-5">
+                          <div className="flex justify-start text-[10px] font-black text-slate-400 uppercase tracking-widest">Description</div>
+                        </th>
+                        <th style={{ width: '60px' }} className="px-2 py-5">
+                          <div className="flex justify-start text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Qty</div>
+                        </th>
+                        <th style={{ width: '135px' }} className="px-4 py-5">
+                          <div className="flex justify-end text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Work Amount (+)</div>
+                        </th>
+                        <th style={{ width: '130px' }} className="px-4 py-5">
+                          <div className="flex justify-end text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Paid (-)</div>
+                        </th>
+                        <th style={{ width: '130px' }} className="px-4 py-5">
+                          <div className="flex justify-end text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Advance (-)</div>
+                        </th>
+                        <th style={{ width: '130px' }} className="px-4 py-5">
+                          <div className="flex justify-end text-[10px] font-black text-orange-400 uppercase tracking-widest whitespace-nowrap">Remaining</div>
+                        </th>
+                        <th style={{ width: '140px' }} className="px-4 py-5">
+                          <div className="flex justify-end text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Net Balance</div>
+                        </th>
+                        <th style={{ width: '110px' }} className="pr-8 pl-4 py-5">
+                          <div className="flex justify-center text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Actions</div>
+                        </th>
+                      </tr>
+                     </thead>
+                     <tbody className="divide-y divide-slate-50">
+                       {txLoading ? (
+                         <tr><td colSpan="9" className="py-20 text-center"><Loader2 className="w-8 h-8 animate-spin text-[#811d1d] mx-auto" /></td></tr>
+                       ) : ledgerData.length === 0 ? (
+                         <tr><td colSpan="9" className="py-24 text-center font-bold text-slate-300 uppercase text-[10px] tracking-widest">No History</td></tr>
+                       ) : (
+                         ledgerData.map(tx => {
+                           const parsed = parseItemAndQty(tx.desc);
+                           return (
+                             <tr key={tx.id} className="group hover:bg-slate-50/70 transition-all">
+                                <td className="pl-8 pr-4 py-5 align-middle">
+                                  <div className="flex justify-start text-xs font-black text-slate-900 whitespace-nowrap">
+                                    {new Date(tx.date).toLocaleDateString('en-GB')}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-5 align-middle">
+                                  <div className="flex justify-start font-bold text-slate-600 text-[13px] break-words">
+                                    {parsed.desc || <span className="text-slate-300 italic">—</span>}
+                                  </div>
+                                </td>
+                                <td className="px-2 py-5 align-middle">
+                                  <div className="flex justify-start pl-1">
+                                    {parsed.qty !== null ? (
+                                      <span className="font-black text-slate-800 text-sm tabular-nums">{parsed.qty}</span>
+                                    ) : (
+                                      <span className="text-slate-300 font-black text-xs">—</span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-5 align-middle">
+                                  <div className="flex justify-end font-black tabular-nums text-xs text-emerald-600 whitespace-nowrap">
+                                    {Number(tx.earning) > 0 ? `₨ ${Number(tx.earning).toLocaleString()}` : <span className="opacity-10">—</span>}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-5 align-middle">
+                                  <div className="flex justify-end font-black tabular-nums text-xs text-blue-500 whitespace-nowrap">
+                                    {Number(tx.paid) > 0 ? `₨ ${Number(tx.paid).toLocaleString()}` : <span className="opacity-10">—</span>}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-5 align-middle">
+                                  <div className="flex justify-end font-black tabular-nums text-xs text-red-500 whitespace-nowrap">
+                                    {Number(tx.advance) > 0 ? `₨ ${Number(tx.advance).toLocaleString()}` : <span className="opacity-10">—</span>}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-5 align-middle">
+                                  <div className="flex justify-end font-black tabular-nums text-xs text-orange-500 whitespace-nowrap">
+                                    {Number(tx.earning) - Number(tx.paid) > 0
+                                      ? `₨ ${(Number(tx.earning) - Number(tx.paid)).toLocaleString()}`
+                                      : <span className="opacity-10">—</span>}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-5 align-middle bg-slate-50/20">
+                                  <div className="flex justify-end font-black tabular-nums text-xs whitespace-nowrap">
+                                    <span className={tx.balAfter < 0 ? 'text-red-600' : 'text-emerald-600'}>
+                                      {tx.balAfter < 0 ? '-' : ''}₨ {Math.abs(tx.balAfter).toLocaleString()}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="pr-8 pl-4 py-5 align-middle">
+                                   <div className="flex items-center justify-center gap-2">
+                                      <button onClick={() => startEditTx(tx)} className="p-2.5 bg-slate-50 text-slate-400 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-all border border-slate-100 hover:border-blue-100"><Pencil className="w-3.5 h-3.5"/></button>
+                                      <button onClick={() => {
+                                         const ids = tx.isMerged ? [tx.pId, tx.rId] : [tx.id];
+                                         setDeleteModal({ type: 'tx', ids, label: tx.desc || 'this entry' });
+                                      }} className="p-2.5 bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all border border-slate-100 hover:border-red-100"><Trash2 className="w-3.5 h-3.5"/></button>
+                                   </div>
+                                </td>
+                             </tr>
+                           );
+                         })
+                       )}
+                       {!txLoading && ledgerData.length > 0 && (
+                         <tr className="bg-slate-900 text-white font-black border-t-2 border-[#C5A059]">
+                            <td colSpan="3" className="pl-8 pr-4 py-6 align-middle">
+                              <div className="flex justify-start text-[10px] uppercase tracking-widest text-[#C5A059]">Total Statement Audit</div>
+                            </td>
+                            <td className="px-4 py-6 align-middle">
+                              <div className="flex justify-end tabular-nums text-sm text-emerald-400 whitespace-nowrap font-black">₨ {totals.earned.toLocaleString()}</div>
+                            </td>
+                            <td className="px-4 py-6 align-middle">
+                              <div className="flex justify-end tabular-nums text-sm text-blue-400 whitespace-nowrap font-black">₨ {totals.paid.toLocaleString()}</div>
+                            </td>
+                            <td className="px-4 py-6 align-middle">
+                              <div className="flex justify-end tabular-nums text-sm text-red-400 whitespace-nowrap font-black">₨ {totals.advance.toLocaleString()}</div>
+                            </td>
+                            <td className="px-4 py-6 align-middle">
+                              <div className="flex justify-end tabular-nums text-sm text-orange-400 whitespace-nowrap font-black">
+                                ₨ {Math.max(0, totals.earned - totals.paid).toLocaleString()}
+                              </div>
+                            </td>
+                            <td className="px-4 py-6 align-middle">
+                              <div className="flex justify-end tabular-nums text-sm text-[#C5A059] whitespace-nowrap font-black">
+                                {totals.balance < 0 ? '-' : ''}₨ {Math.abs(totals.balance).toLocaleString()}
+                              </div>
+                            </td>
+                            <td className="pr-8 pl-4 py-6 align-middle"></td>
+                         </tr>
+                       )}
+                     </tbody>
+                  </table>
                </div>
             </div>
           </>
@@ -518,6 +730,27 @@ function WorkerLedger() {
         .no-spinner { -moz-appearance: textfield; }
         .cursor-pointer { cursor: pointer !important; }
       `}</style>
+
+      {/* CUSTOM DELETE MODAL */}
+      {deleteModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[32px] p-8 w-full max-w-sm shadow-2xl border-t-4 border-red-500 animate-in zoom-in-95 duration-300">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-6">
+                <Trash2 className="w-8 h-8 text-red-500" />
+              </div>
+              <h4 className="font-black text-slate-900 text-xl tracking-tight mb-2">Confirm Delete</h4>
+              <p className="text-sm font-medium text-slate-500 mb-8 px-4">
+                Are you sure you want to delete <span className="font-black text-slate-900">{deleteModal.label}</span>? This cannot be undone.
+              </p>
+              <div className="flex items-center gap-3 w-full">
+                <button onClick={() => setDeleteModal(null)} className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95">Cancel</button>
+                <button onClick={confirmDelete} className="flex-1 py-4 bg-red-500 hover:bg-red-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-red-500/30">Delete</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

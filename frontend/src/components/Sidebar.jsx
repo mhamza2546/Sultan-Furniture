@@ -10,16 +10,20 @@ import {
   Truck,
   CreditCard,
   CalendarSearch,
-  Lock
+  Lock,
+  Tag,
+  BookOpen
 } from 'lucide-react';
 
 function Sidebar({ activeTab, setActiveTab, onLogout, hideLogo = false }) {
   const navItems = [
     { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
     { id: 'inventory', label: 'Inventory & Materials', icon: Boxes },
+    { id: 'items', label: 'Items Catalog', icon: Tag },
     { id: 'orders', label: 'Order Tracking', icon: Truck },
     { id: 'labour', label: 'Labour Ledger', icon: Users },
     { id: 'accounts', label: 'Showroom Sales', icon: Wallet },
+    { id: 'roznamcha', label: 'Roznamcha', icon: BookOpen },
     { id: 'vault', label: 'Private Vault', icon: Lock },
     { id: 'reports', label: 'History & Reports', icon: CalendarSearch },
   ];
@@ -41,7 +45,7 @@ function Sidebar({ activeTab, setActiveTab, onLogout, hideLogo = false }) {
       )}
       
       {/* Navigation */}
-      <div className="flex-1 overflow-y-auto px-4 py-8 space-y-1 custom-scrollbar">
+      <div className="flex-1 px-4 py-8 space-y-1" style={{ overflowY: 'auto', overscrollBehavior: 'contain', touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}>
         <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-4">Operations</p>
         
         {navItems.map(item => {

@@ -12,6 +12,8 @@ import Reports from './components/Reports';
 import NewOrderModal from './components/NewOrderModal';
 import Profile from './components/Profile';
 import PrivateVault from './components/PrivateVault';
+import ItemsCatalog from './components/ItemsCatalog';
+import Roznamcha from './components/Roznamcha';
 import { Bell, Search, Globe, ChevronDown, Plus, LayoutGrid, List, Menu } from 'lucide-react';
 
 function App() {
@@ -52,6 +54,8 @@ function App() {
             <VendorLedger />
           </div>
         );
+      case 'items':
+        return <ItemsCatalog />;
       case 'labour':
         return (
           <div className="animate-in fade-in duration-500 h-full">
@@ -70,6 +74,13 @@ function App() {
         return <Reports />;
       case 'vault':
         return <PrivateVault />;
+      case 'roznamcha':
+        return (
+          <div className="animate-in fade-in duration-500 h-full">
+            <h2 className="text-2xl font-bold text-slate-900 mb-4 tracking-tight">Roznamcha — Daily Expense Journal</h2>
+            <Roznamcha />
+          </div>
+        );
       case 'profile':
         return <Profile onLogout={() => setIsAuthenticated(false)} />;
       default:

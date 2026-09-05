@@ -257,6 +257,50 @@ async function initDB() {
     // Ensure amount column exists in older instances
     await ensureColumn(connection, 'private_vault', 'amount', 'amount DECIMAL(10,2) DEFAULT 0');
 
+    // Items Catalog — Owner-defined items with prices
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS items (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        price DECIMAL(10,2) NOT NULL DEFAULT 0,
+        unit VARCHAR(50) NOT NULL DEFAULT 'Piece',
+        category VARCHAR(100) NOT NULL DEFAULT 'General',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Ensure category column exists in older instances
+    await ensureColumn(connection, 'items', 'category', "category VARCHAR(100) NOT NULL DEFAULT 'General'");
+
+    // Ensure item_type column exists for separating Labour vs Showroom items
+    await ensureColumn(connection, 'items', 'item_type', "item_type ENUM('LABOUR', 'SHOWROOM', 'BOTH') NOT NULL DEFAULT 'BOTH'");
+
+    // ============================================================
+    // ROZNAMCHA (Daily Expense Journal)
+    // ============================================================
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS roznamcha_accounts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        description VARCHAR(500),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS roznamcha_transactions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        account_id INT NOT NULL,
+        type ENUM('EXPENSE','CREDIT') NOT NULL DEFAULT 'EXPENSE',
+        amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+        description VARCHAR(500),
+        tx_date DATE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (account_id) REFERENCES roznamcha_accounts(id) ON DELETE CASCADE
+      )
+    `);
+
+
     connection.release();
     console.log('✅ All database tables verified/created.');
   } catch (error) {

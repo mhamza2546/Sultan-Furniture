@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Calendar, Search, Package, Users, TrendingUp, ShoppingCart,
-  ArrowUp, ArrowDown, Loader2, AlertCircle, ClipboardList, Briefcase
+  ArrowUp, ArrowDown, Loader2, AlertCircle, ClipboardList, Briefcase, BookOpen
 } from 'lucide-react';
 import { API } from '../lib/api';
 
@@ -124,11 +124,12 @@ function Reports() {
           </div>
 
           {/* Summary Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             <StatCard icon={ArrowUp} label="Material IN" value={`${data.summary.totalMaterialIn} units`} color="text-emerald-600" bg="bg-emerald-50" />
             <StatCard icon={ArrowDown} label="Material OUT" value={`${data.summary.totalMaterialOut} units`} color="text-red-500" bg="bg-red-50" />
             <StatCard icon={Users} label="Labour Paid" value={`Rs. ${Number(data.summary.totalLabourPaid).toLocaleString()}`} color="text-[#C5A059]" bg="bg-amber-50" />
             <StatCard icon={ShoppingCart} label="Sales" value={`Rs. ${Number(data.summary.totalSales).toLocaleString()}`} color="text-blue-600" bg="bg-blue-50" />
+            <StatCard icon={BookOpen} label="Roznamcha" value={`Rs. ${Number(data.summary.totalRoznamchaExpense || 0).toLocaleString()}`} color="text-purple-600" bg="bg-purple-50" />
           </div>
 
 
@@ -137,13 +138,13 @@ function Reports() {
           <Section title="Inventory Movements" icon={Package} count={data.inventoryLogs.length}>
             {data.inventoryLogs.length === 0
               ? <Empty text="No inventory movement recorded for this date" />
-              : <div className="table-responsive"><table className="w-full text-sm">
+              : <div className="table-responsive"><table className="w-full text-sm table-fixed" style={{ minWidth: '750px' }}>
                   <thead><tr className="text-[10px] uppercase tracking-widest text-slate-400 font-bold border-b border-slate-100">
-                    <th className="pb-3 text-left pl-4">Date / Time</th>
-                    <th className="pb-3 text-left px-4">Material</th>
-                    <th className="pb-3 text-left px-4">Reason</th>
-                    <th className="pb-3 text-right px-4 whitespace-nowrap">Stock In (+)</th>
-                    <th className="pb-3 text-right px-4 whitespace-nowrap">Stock Out (-)</th>
+                    <th style={{ width: '130px' }} className="pb-3 text-left pl-4">Date / Time</th>
+                    <th style={{ width: 'auto' }} className="pb-3 text-left px-4">Material</th>
+                    <th style={{ width: '180px' }} className="pb-3 text-left px-4">Reason</th>
+                    <th style={{ width: '150px' }} className="pb-3 px-4"><div className="flex justify-end whitespace-nowrap">Stock In (+)</div></th>
+                    <th style={{ width: '150px' }} className="pb-3 pr-4"><div className="flex justify-end whitespace-nowrap">Stock Out (-)</div></th>
                   </tr></thead>
                   <tbody className="divide-y divide-slate-50">
                     {data.inventoryLogs.map((l, i) => {
@@ -155,13 +156,17 @@ function Reports() {
                             <p className="text-xs font-black text-slate-900">{new Date(l.created_at).toLocaleDateString('en-GB')}</p>
                             <p className="text-[10px] text-slate-400 font-bold mt-0.5">{new Date(l.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                           </td>
-                          <td className="py-4 px-4 font-semibold text-slate-800">{l.material_name}</td>
-                          <td className="py-4 px-4 text-slate-500 text-xs italic">{l.reason || '—'}</td>
-                          <td className="py-4 px-4 text-right font-black tabular-nums text-emerald-600 whitespace-nowrap">
-                            {isIn ? `${qty.toLocaleString()} units` : <span className="opacity-10">—</span>}
+                          <td className="py-4 px-4 font-semibold text-slate-800 break-words">{l.material_name}</td>
+                          <td className="py-4 px-4 text-slate-500 text-xs italic break-words">{l.reason || '—'}</td>
+                          <td className="py-4 px-4">
+                            <div className="flex justify-end font-black tabular-nums text-emerald-600 whitespace-nowrap">
+                              {isIn ? `${qty.toLocaleString()} units` : <span className="opacity-20">—</span>}
+                            </div>
                           </td>
-                          <td className="py-4 px-4 text-right font-black tabular-nums text-red-500 whitespace-nowrap">
-                            {!isIn ? `${qty.toLocaleString()} units` : <span className="opacity-10">—</span>}
+                          <td className="py-4 pr-4">
+                            <div className="flex justify-end font-black tabular-nums text-red-500 whitespace-nowrap">
+                              {!isIn ? `${qty.toLocaleString()} units` : <span className="opacity-20">—</span>}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -170,11 +175,15 @@ function Reports() {
                   <tfoot className="bg-slate-900 font-bold">
                     <tr>
                       <td colSpan="3" className="py-4 pl-4 text-[10px] uppercase tracking-widest text-[#C5A059]">Total Inventory Movement</td>
-                      <td className="py-4 px-4 text-right text-emerald-400 font-black tabular-nums whitespace-nowrap">
-                        {data.summary.totalMaterialIn.toLocaleString()} units IN
+                      <td className="py-4 px-4">
+                        <div className="flex justify-end text-emerald-400 font-black tabular-nums whitespace-nowrap">
+                          {data.summary.totalMaterialIn.toLocaleString()} units IN
+                        </div>
                       </td>
-                      <td className="py-4 pr-4 text-right text-red-400 font-black tabular-nums whitespace-nowrap">
-                        {data.summary.totalMaterialOut.toLocaleString()} units OUT
+                      <td className="py-4 pr-4">
+                        <div className="flex justify-end text-red-400 font-black tabular-nums whitespace-nowrap">
+                          {data.summary.totalMaterialOut.toLocaleString()} units OUT
+                        </div>
                       </td>
                     </tr>
                   </tfoot>
@@ -185,14 +194,14 @@ function Reports() {
           <Section title="Vendor Purchases" icon={Briefcase} count={(data.vendorPurchases || []).length}>
             {!(data.vendorPurchases || []).length
               ? <Empty text="No vendor purchases recorded for this date" />
-              : <div className="table-responsive"><table className="w-full text-sm">
+              : <div className="table-responsive"><table className="w-full text-sm table-fixed" style={{ minWidth: '850px' }}>
                   <thead><tr className="text-[10px] uppercase tracking-widest text-slate-400 font-bold border-b border-slate-100">
-                    <th className="pb-3 text-left pl-4">Date</th>
-                    <th className="pb-3 text-left px-4">Vendor</th>
-                    <th className="pb-3 text-left px-4">Description</th>
-                    <th className="pb-3 text-right px-4 whitespace-nowrap">Bill Amt (+)</th>
-                    <th className="pb-3 text-right px-4 whitespace-nowrap">Paid (-)</th>
-                    <th className="pb-3 text-right px-4 whitespace-nowrap">Remaining</th>
+                    <th style={{ width: '120px' }} className="pb-3 text-left pl-4">Date</th>
+                    <th style={{ width: '170px' }} className="pb-3 text-left px-4">Vendor</th>
+                    <th style={{ width: 'auto' }} className="pb-3 text-left px-4">Description</th>
+                    <th style={{ width: '140px' }} className="pb-3 px-4"><div className="flex justify-end whitespace-nowrap">Bill Amt (+)</div></th>
+                    <th style={{ width: '140px' }} className="pb-3 px-4"><div className="flex justify-end whitespace-nowrap">Paid (-)</div></th>
+                    <th style={{ width: '140px' }} className="pb-3 pr-4"><div className="flex justify-end whitespace-nowrap">Remaining</div></th>
                   </tr></thead>
                   <tbody className="divide-y divide-slate-50">
                     {data.vendorPurchases.map((v, i) => {
@@ -202,16 +211,22 @@ function Reports() {
                       return (
                         <tr key={v.id || i} className="hover:bg-slate-50">
                           <td className="py-4 text-xs font-black text-slate-900 pl-4 whitespace-nowrap">{new Date(v.created_at).toLocaleDateString('en-GB')}</td>
-                          <td className="py-4 font-semibold text-slate-800 px-4">{v.vendor_name}</td>
-                          <td className="py-4 text-slate-500 px-4 italic text-xs">{v.description}</td>
-                          <td className="py-4 text-right px-4 font-black tabular-nums text-slate-900 whitespace-nowrap">
-                            {isBill ? `₨ ${amt.toLocaleString()}` : <span className="opacity-10">—</span>}
+                          <td className="py-4 font-semibold text-slate-800 px-4 break-words">{v.vendor_name}</td>
+                          <td className="py-4 text-slate-500 px-4 italic text-xs break-words">{v.description || '—'}</td>
+                          <td className="py-4 px-4">
+                            <div className="flex justify-end font-black tabular-nums text-slate-900 whitespace-nowrap">
+                              {isBill ? `₨ ${amt.toLocaleString()}` : <span className="opacity-20">—</span>}
+                            </div>
                           </td>
-                          <td className="py-4 text-right px-4 font-black tabular-nums text-emerald-600 whitespace-nowrap">
-                            {isPayment ? `₨ ${amt.toLocaleString()}` : <span className="opacity-10">—</span>}
+                          <td className="py-4 px-4">
+                            <div className="flex justify-end font-black tabular-nums text-emerald-600 whitespace-nowrap">
+                              {isPayment ? `₨ ${amt.toLocaleString()}` : <span className="opacity-20">—</span>}
+                            </div>
                           </td>
-                          <td className="py-4 text-right px-4 font-black tabular-nums text-orange-500 whitespace-nowrap">
-                            {isBill ? `₨ ${amt.toLocaleString()}` : <span className="opacity-10">—</span>}
+                          <td className="py-4 pr-4">
+                            <div className="flex justify-end font-black tabular-nums text-orange-500 whitespace-nowrap">
+                              {isBill ? `₨ ${amt.toLocaleString()}` : <span className="opacity-20">—</span>}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -220,9 +235,15 @@ function Reports() {
                   <tfoot className="bg-slate-900 font-bold">
                     <tr>
                       <td colSpan="3" className="py-4 pl-4 text-[10px] uppercase tracking-widest text-[#C5A059]">Gross Vendor Summary</td>
-                      <td className="py-4 px-4 text-right text-white font-black tabular-nums whitespace-nowrap">₨ {(data.summary.totalVendorBills || 0).toLocaleString()}</td>
-                      <td className="py-4 px-4 text-right text-emerald-400 font-black tabular-nums whitespace-nowrap">₨ {(data.summary.totalVendorPaid || 0).toLocaleString()}</td>
-                      <td className="py-4 pr-4 text-right text-orange-400 font-black tabular-nums whitespace-nowrap">₨ {((data.summary.totalVendorBills || 0) - (data.summary.totalVendorPaid || 0)).toLocaleString()}</td>
+                      <td className="py-4 px-4">
+                        <div className="flex justify-end text-white font-black tabular-nums whitespace-nowrap">₨ {(data.summary.totalVendorBills || 0).toLocaleString()}</div>
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="flex justify-end text-emerald-400 font-black tabular-nums whitespace-nowrap">₨ {(data.summary.totalVendorPaid || 0).toLocaleString()}</div>
+                      </td>
+                      <td className="py-4 pr-4">
+                        <div className="flex justify-end text-orange-400 font-black tabular-nums whitespace-nowrap">₨ {((data.summary.totalVendorBills || 0) - (data.summary.totalVendorPaid || 0)).toLocaleString()}</div>
+                      </td>
                     </tr>
                   </tfoot>
                 </table></div>
@@ -233,14 +254,14 @@ function Reports() {
           <Section title="Labour Payouts" icon={Users} count={data.labourPayouts.length}>
             {data.labourPayouts.length === 0
               ? <Empty text="No labour transactions recorded for this date" />
-              : <div className="table-responsive"><table className="w-full text-sm">
+              : <div className="table-responsive"><table className="w-full text-sm table-fixed" style={{ minWidth: '850px' }}>
                   <thead><tr className="text-[10px] uppercase tracking-widest text-slate-400 font-bold border-b border-slate-100">
-                    <th className="pb-3 text-left pl-4">Date</th>
-                    <th className="pb-3 text-left px-4">Worker</th>
-                    <th className="pb-3 text-left px-4">Description</th>
-                    <th className="pb-3 text-right px-4 whitespace-nowrap">Work Amount (+)</th>
-                    <th className="pb-3 text-right px-4 whitespace-nowrap">Paid (-)</th>
-                    <th className="pb-3 text-right px-4 whitespace-nowrap">Advance (-)</th>
+                    <th style={{ width: '120px' }} className="pb-3 text-left pl-4">Date</th>
+                    <th style={{ width: '170px' }} className="pb-3 text-left px-4">Worker</th>
+                    <th style={{ width: 'auto' }} className="pb-3 text-left px-4">Description</th>
+                    <th style={{ width: '140px' }} className="pb-3 px-4"><div className="flex justify-end whitespace-nowrap">Work Amount (+)</div></th>
+                    <th style={{ width: '140px' }} className="pb-3 px-4"><div className="flex justify-end whitespace-nowrap">Paid (-)</div></th>
+                    <th style={{ width: '140px' }} className="pb-3 pr-4"><div className="flex justify-end whitespace-nowrap">Advance (-)</div></th>
                   </tr></thead>
                   <tbody className="divide-y divide-slate-50">
                     {data.labourPayouts.map(p => {
@@ -251,16 +272,22 @@ function Reports() {
                       return (
                         <tr key={p.id} className="hover:bg-slate-50">
                           <td className="py-4 text-xs font-black text-slate-900 pl-4 whitespace-nowrap">{new Date(p.created_at).toLocaleDateString('en-GB')}</td>
-                          <td className="py-4 font-semibold text-slate-800 px-4">{p.worker_name}</td>
-                          <td className="py-4 text-slate-500 px-4 italic text-xs">{p.description}</td>
-                          <td className="py-4 text-right px-4 font-black tabular-nums text-emerald-600 whitespace-nowrap">
-                            {isEarning ? `₨ ${amt.toLocaleString()}` : <span className="opacity-10">—</span>}
+                          <td className="py-4 font-semibold text-slate-800 px-4 break-words">{p.worker_name}</td>
+                          <td className="py-4 text-slate-500 px-4 italic text-xs break-words">{p.description || '—'}</td>
+                          <td className="py-4 px-4">
+                            <div className="flex justify-end font-black tabular-nums text-emerald-600 whitespace-nowrap">
+                              {isEarning ? `₨ ${amt.toLocaleString()}` : <span className="opacity-20">—</span>}
+                            </div>
                           </td>
-                          <td className="py-4 text-right px-4 font-black tabular-nums text-blue-500 whitespace-nowrap">
-                            {isPaid ? `₨ ${amt.toLocaleString()}` : <span className="opacity-10">—</span>}
+                          <td className="py-4 px-4">
+                            <div className="flex justify-end font-black tabular-nums text-blue-500 whitespace-nowrap">
+                              {isPaid ? `₨ ${amt.toLocaleString()}` : <span className="opacity-20">—</span>}
+                            </div>
                           </td>
-                          <td className="py-4 text-right px-4 font-black tabular-nums text-red-500 whitespace-nowrap">
-                            {isAdvance ? `₨ ${amt.toLocaleString()}` : <span className="opacity-10">—</span>}
+                          <td className="py-4 pr-4">
+                            <div className="flex justify-end font-black tabular-nums text-red-500 whitespace-nowrap">
+                              {isAdvance ? `₨ ${amt.toLocaleString()}` : <span className="opacity-20">—</span>}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -269,10 +296,16 @@ function Reports() {
                   <tfoot className="bg-slate-900 font-bold">
                     <tr>
                       <td colSpan="3" className="py-4 pl-4 text-[10px] uppercase tracking-widest text-[#C5A059]">Gross Labour Summary</td>
-                      <td className="py-4 px-4 text-right text-emerald-400 font-black tabular-nums whitespace-nowrap">₨ {(data.summary.totalLabourEarned || 0).toLocaleString()}</td>
-                      <td className="py-4 px-4 text-right text-blue-400 font-black tabular-nums whitespace-nowrap">₨ {(data.summary.totalLabourPaid || 0).toLocaleString()}</td>
-                      <td className="py-4 pr-4 text-right text-red-400 font-black tabular-nums whitespace-nowrap">
-                        ₨ {data.labourPayouts.filter(p => String(p.description || '').toLowerCase().includes('advance') && String(p.type).toUpperCase() !== 'EARNING').reduce((s, p) => s + Number(p.amount || 0), 0).toLocaleString()}
+                      <td className="py-4 px-4">
+                        <div className="flex justify-end text-emerald-400 font-black tabular-nums whitespace-nowrap">₨ {(data.summary.totalLabourEarned || 0).toLocaleString()}</div>
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="flex justify-end text-blue-400 font-black tabular-nums whitespace-nowrap">₨ {(data.summary.totalLabourPaid || 0).toLocaleString()}</div>
+                      </td>
+                      <td className="py-4 pr-4">
+                        <div className="flex justify-end text-red-400 font-black tabular-nums whitespace-nowrap">
+                          ₨ {data.labourPayouts.filter(p => String(p.description || '').toLowerCase().includes('advance') && String(p.type).toUpperCase() !== 'EARNING').reduce((s, p) => s + Number(p.amount || 0), 0).toLocaleString()}
+                        </div>
                       </td>
                     </tr>
                   </tfoot>
@@ -284,14 +317,14 @@ function Reports() {
           <Section title="Showroom Sales" icon={TrendingUp} count={data.salesRecords.length}>
             {data.salesRecords.length === 0
               ? <Empty text="No sales recorded for this date" />
-              : <div className="table-responsive"><table className="w-full text-sm">
+              : <div className="table-responsive"><table className="w-full text-sm table-fixed" style={{ minWidth: '850px' }}>
                   <thead><tr className="text-[10px] uppercase tracking-widest text-slate-400 font-bold border-b border-slate-100">
-                    <th className="pb-3 text-left pl-4">Customer</th>
-                    <th className="pb-3 text-left px-4">Product</th>
-                    <th className="pb-3 text-right px-4 whitespace-nowrap">Sale (+)</th>
-                    <th className="pb-3 text-right px-4 whitespace-nowrap">Received (-)</th>
-                    <th className="pb-3 text-right px-4 whitespace-nowrap">Remaining</th>
-                    <th className="pb-3 text-right px-4 whitespace-nowrap">Net Balance</th>
+                    <th style={{ width: '170px' }} className="pb-3 text-left pl-4">Customer</th>
+                    <th style={{ width: 'auto' }} className="pb-3 text-left px-4">Product</th>
+                    <th style={{ width: '130px' }} className="pb-3 px-4"><div className="flex justify-end whitespace-nowrap">Sale (+)</div></th>
+                    <th style={{ width: '130px' }} className="pb-3 px-4"><div className="flex justify-end whitespace-nowrap">Received (-)</div></th>
+                    <th style={{ width: '130px' }} className="pb-3 px-4"><div className="flex justify-end whitespace-nowrap">Remaining</div></th>
+                    <th style={{ width: '140px' }} className="pb-3 pr-4"><div className="flex justify-end whitespace-nowrap">Net Balance</div></th>
                   </tr></thead>
                   <tbody className="divide-y divide-slate-50">
                     {data.salesRecords.map(s => {
@@ -300,22 +333,63 @@ function Reports() {
                       const remaining = sale - received;
                       return (
                       <tr key={s.id} className="hover:bg-slate-50">
-                        <td className="py-3 font-semibold text-slate-800 pl-4">{s.customer_name}</td>
-                        <td className="py-3 text-slate-600 px-4">{s.product}</td>
-                        <td className="py-3 text-right px-4 font-black tabular-nums text-slate-900 whitespace-nowrap">{sale > 0 ? `₨ ${sale.toLocaleString()}` : <span className="opacity-10">—</span>}</td>
-                        <td className="py-3 text-right px-4 font-black tabular-nums text-emerald-600 whitespace-nowrap">{received > 0 ? `₨ ${received.toLocaleString()}` : <span className="opacity-10">—</span>}</td>
-                        <td className="py-3 text-right px-4 font-black tabular-nums text-orange-500 whitespace-nowrap">{remaining !== 0 ? `₨ ${remaining.toLocaleString()}` : <span className="opacity-10">—</span>}</td>
-                        <td className="py-3 text-right px-4 font-black tabular-nums text-[#C5A059] whitespace-nowrap">₨ {Number(s.balance_due).toLocaleString()}</td>
+                        <td className="py-3 font-semibold text-slate-800 pl-4 break-words">{s.customer_name}</td>
+                        <td className="py-3 text-slate-600 px-4 break-words">{s.product}</td>
+                        <td className="py-3 px-4"><div className="flex justify-end font-black tabular-nums text-slate-900 whitespace-nowrap">{sale > 0 ? `₨ ${sale.toLocaleString()}` : <span className="opacity-20">—</span>}</div></td>
+                        <td className="py-3 px-4"><div className="flex justify-end font-black tabular-nums text-emerald-600 whitespace-nowrap">{received > 0 ? `₨ ${received.toLocaleString()}` : <span className="opacity-20">—</span>}</div></td>
+                        <td className="py-3 px-4"><div className="flex justify-end font-black tabular-nums text-orange-500 whitespace-nowrap">{remaining !== 0 ? `₨ ${remaining.toLocaleString()}` : <span className="opacity-20">—</span>}</div></td>
+                        <td className="py-3 pr-4"><div className="flex justify-end font-black tabular-nums text-[#C5A059] whitespace-nowrap">₨ {Number(s.balance_due).toLocaleString()}</div></td>
                       </tr>
                     )})}
                   </tbody>
                   <tfoot className="bg-slate-900 font-bold">
                     <tr>
                       <td colSpan="2" className="py-4 pl-4 text-[10px] uppercase tracking-widest text-[#C5A059]">Gross Sales Revenue</td>
-                      <td className="py-4 px-4 text-right text-white font-black tabular-nums whitespace-nowrap">₨ {data.salesRecords.reduce((sum, s) => sum + Number(s.total_amount || 0), 0).toLocaleString()}</td>
-                      <td className="py-4 px-4 text-right text-emerald-400 font-black tabular-nums whitespace-nowrap">₨ {data.salesRecords.reduce((sum, s) => sum + Number(s.down_payment || 0), 0).toLocaleString()}</td>
-                      <td className="py-4 px-4 text-right text-orange-400 font-black tabular-nums whitespace-nowrap">₨ {data.salesRecords.reduce((sum, s) => sum + (Number(s.total_amount || 0) - Number(s.down_payment || 0)), 0).toLocaleString()}</td>
-                      <td className="py-4 pr-4"></td>
+                      <td className="py-4 px-4"><div className="flex justify-end text-white font-black tabular-nums whitespace-nowrap">₨ {data.salesRecords.reduce((sum, s) => sum + Number(s.total_amount || 0), 0).toLocaleString()}</div></td>
+                      <td className="py-4 px-4"><div className="flex justify-end text-emerald-400 font-black tabular-nums whitespace-nowrap">₨ {data.salesRecords.reduce((sum, s) => sum + Number(s.down_payment || 0), 0).toLocaleString()}</div></td>
+                      <td className="py-4 px-4"><div className="flex justify-end text-orange-400 font-black tabular-nums whitespace-nowrap">₨ {data.salesRecords.reduce((sum, s) => sum + (Number(s.total_amount || 0) - Number(s.down_payment || 0)), 0).toLocaleString()}</div></td>
+                      <td className="py-4 pr-4"><div className="flex justify-end text-slate-500">—</div></td>
+                    </tr>
+                  </tfoot>
+                </table></div>
+            }
+          </Section>
+
+          {/* Roznamcha Expenses */}
+          <Section title="Roznamcha — Daily Expenses" icon={BookOpen} count={(data.roznamchaEntries || []).length}>
+            {!(data.roznamchaEntries || []).length
+              ? <Empty text="No roznamcha entries recorded for this period" />
+              : <div className="table-responsive"><table className="w-full text-sm table-fixed" style={{ minWidth: '700px' }}>
+                  <thead><tr className="text-[10px] uppercase tracking-widest text-slate-400 font-bold border-b border-slate-100">
+                    <th style={{ width: '130px' }} className="pb-3 text-left pl-4">Date</th>
+                    <th style={{ width: '180px' }} className="pb-3 text-left px-4">Account</th>
+                    <th style={{ width: 'auto' }} className="pb-3 text-left px-4">Description</th>
+                    <th style={{ width: '160px' }} className="pb-3 pr-4">
+                      <div className="flex justify-end whitespace-nowrap">Amount</div>
+                    </th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {data.roznamchaEntries.map((r, i) => (
+                      <tr key={r.id || i} className="hover:bg-slate-50">
+                        <td className="py-4 pl-4 text-xs font-black text-slate-900 whitespace-nowrap">{new Date(r.tx_date).toLocaleDateString('en-GB')}</td>
+                        <td className="py-4 px-4 font-semibold text-slate-800 break-words">{r.account_name}</td>
+                        <td className="py-4 px-4 text-slate-500 italic text-xs break-words">{r.description || '—'}</td>
+                        <td className="py-4 pr-4">
+                          <div className="flex justify-end font-black tabular-nums whitespace-nowrap text-red-600">
+                            ₨ {Number(r.amount).toLocaleString()}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-slate-900 font-bold">
+                    <tr>
+                      <td colSpan="3" className="py-4 pl-4 text-[10px] uppercase tracking-widest text-[#C5A059]">Total Roznamcha Kharcha</td>
+                      <td className="py-4 pr-4">
+                        <div className="flex justify-end text-red-400 font-black tabular-nums whitespace-nowrap">
+                          ₨ {Number(data.summary.totalRoznamchaExpense || 0).toLocaleString()}
+                        </div>
+                      </td>
                     </tr>
                   </tfoot>
                 </table></div>
